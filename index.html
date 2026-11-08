@@ -2,86 +2,222 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sticky úkoly</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Stickies – úkoly</title>
+  <meta name="description" content="Přehledná správa úkolů ve stylu sticky notes, synchronizovaná napříč zařízeními.">
+  <meta name="theme-color" content="#080818">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Stickies">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- PŘIHLÁŠENÍ -->
-  <section id="login-view" class="login hidden">
-    <form id="login-form" class="login-card" autocomplete="off">
-      <h1>to do <span>úkoly</span></h1>
-      <label>Uživatelské jméno
-        <input id="login-username" type="text" required autofocus>
-      </label>
-      <label id="login-password-wrap" class="hidden">Heslo
-        <input id="login-password" type="password">
-      </label>
-      <p id="login-error" class="error"></p>
-      <button type="submit" class="btn-primary">Přihlásit se</button>
+  <!-- Ikony (sprite) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="3"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></symbol>
+    <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path class="tick" d="m8 12.5 3 3 5-6"/></symbol>
+    <symbol id="i-check-filled" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="m8 12.5 3 3 5-6" stroke="#0b0a22" stroke-width="2.4"/></symbol>
+    <symbol id="i-today" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="m9 15.5 2 2 4-4"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.5 6.6C3.7 8.5 2 12 2 12s3.6 7 10 7c1.5 0 2.8-.3 4-.8"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 16v4M17 18h4"/></symbol>
+  </svg>
+
+  <a class="skip" href="#main">Přeskočit na úkoly</a>
+
+  <!-- ========== PŘIHLÁŠENÍ ========== -->
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="login-card" novalidate>
+      <div class="login-brand">
+        <span class="logo logo-lg"><svg class="i"><use href="#i-tick"/></svg></span>
+        <span class="brand-name">Stickies</span>
+      </div>
+      <div>
+        <h1 class="login-title">Přihlášení</h1>
+        <p class="muted">Tvoje úkoly, synchronizované na všech zařízeních.</p>
+      </div>
+      <div class="field">
+        <label for="login-id">Uživatelské jméno nebo e-mail</label>
+        <input id="login-id" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      </div>
+      <div class="field">
+        <label for="login-pw">Heslo</label>
+        <div class="pw">
+          <input id="login-pw" type="password" autocomplete="current-password" required>
+          <button type="button" id="pw-toggle" class="icon-btn" aria-label="Zobrazit heslo" aria-pressed="false"><svg class="i"><use href="#i-eye"/></svg></button>
+        </div>
+      </div>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Přihlásit se</button>
+      <p class="fine">Účty zakládá správce aplikace. Registrace není otevřená.</p>
     </form>
   </section>
 
-  <!-- APLIKACE -->
-  <main id="app-view" class="hidden">
-    <header class="topbar">
-      <h1>to do <span>dnes</span></h1>
-      <form id="add-form" class="add-form">
-        <input id="add-text" type="text" placeholder="Nový úkol…" required maxlength="120">
-        <select id="add-category"></select>
-        <button class="btn-primary" type="submit">+ Přidat</button>
-      </form>
-      <div class="user">
-        <span id="user-name"></span>
-        <button id="logout-btn" class="btn-ghost">Odhlásit</button>
+  <!-- ========== APLIKACE ========== -->
+  <div id="app" class="shell" data-view="today" hidden>
+    <header class="top">
+      <div class="brand">
+        <span class="logo"><svg class="i"><use href="#i-tick"/></svg></span>
+        <span class="brand-name">Stickies</span>
+      </div>
+      <div class="top-right">
+        <span id="sync" class="sync warn" role="status"><span class="dot-s"></span><span id="sync-text"></span></span>
+        <div class="user" id="user-wrap" hidden>
+          <button id="user-btn" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu" aria-label="Účet"></button>
+          <div id="user-menu" class="menu" hidden>
+            <p class="menu-label" id="user-label"></p>
+            <button id="logout" class="menu-item" type="button"><svg class="i"><use href="#i-logout"/></svg>Odhlásit se</button>
+          </div>
+        </div>
       </div>
     </header>
 
-    <!-- DVĚ HLAVNÍ SEKCE -->
-    <div class="spread">
-      <section class="page">
-        <h2>dnešní <span>priority</span></h2>
-        <div id="today-list" class="notes"></div>
-      </section>
-      <section class="page">
-        <h2>hotovo <span>dnes</span></h2>
-        <div id="done-list" class="notes"></div>
-      </section>
+    <div id="local-note" class="local-note" hidden>
+      <span>Lokální režim: úkoly zůstávají jen v tomto prohlížeči. Synchronizaci zapneš v <code>config.js</code> (viz README).</span>
+      <button id="local-dismiss" class="icon-btn" type="button" aria-label="Skrýt upozornění"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
 
-    <!-- KATEGORIE -->
-    <section class="backlog">
-      <div class="backlog-head">
-        <h2>všechny <span>úkoly</span></h2>
-        <button id="add-category-btn" class="btn-ghost">+ kategorie</button>
+    <section class="hero" aria-labelledby="h-title">
+      <div>
+        <p class="eyebrow" id="date"></p>
+        <h1 id="h-title">Dnes</h1>
+        <p class="muted" id="progress-text"></p>
       </div>
-      <p class="hint">Kliknutím na lísteček ho přesuneš do dnešních priorit.</p>
-      <div id="categories" class="categories"></div>
+      <div class="ring" aria-hidden="true">
+        <svg viewBox="0 0 72 72" width="72" height="72">
+          <defs>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#1fe0b8"/>
+            </linearGradient>
+          </defs>
+          <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="7"/>
+          <circle id="ring-fg" cx="36" cy="36" r="28" fill="none" stroke="url(#ringGrad)" stroke-width="7" stroke-linecap="round"
+                  stroke-dasharray="175.93" stroke-dashoffset="175.93" transform="rotate(-90 36 36)"/>
+        </svg>
+        <span id="ring-pct" class="ring-pct"></span>
+      </div>
     </section>
-  </main>
 
-  <!-- EDITACE -->
-  <dialog id="edit-dialog">
-    <form id="edit-form" method="dialog">
-      <h3>Upravit úkol</h3>
-      <label>Text
-        <input id="edit-text" type="text" required maxlength="120">
-      </label>
-      <label>Kategorie
-        <select id="edit-category"></select>
-      </label>
+    <div id="scrim" class="scrim"></div>
+    <form id="composer" class="composer" autocomplete="off">
+      <div class="sheet-head">
+        <h2>Nový úkol</h2>
+        <button type="button" id="composer-close" class="icon-btn" aria-label="Zavřít"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <label class="sr-only" for="add-text">Nový úkol</label>
+      <input id="add-text" class="composer-text" type="text" placeholder="Co je potřeba udělat?" maxlength="200" enterkeyhint="done">
+      <label class="sr-only" for="add-cat">Kategorie</label>
+      <select id="add-cat"></select>
+      <label class="toggle"><input type="checkbox" id="add-today"><span><svg class="i"><use href="#i-today"/></svg>Rovnou na dnes</span></label>
+      <button class="btn btn-primary" type="submit">Přidat</button>
+    </form>
+
+    <main id="main" tabindex="-1">
+      <div class="cols">
+        <section class="panel" aria-labelledby="h-today-list" data-pane="today">
+          <header class="panel-head">
+            <h2 id="h-today-list">Dnešní priority</h2>
+            <span class="count" id="count-today">0</span>
+          </header>
+          <div id="today-list" class="notes" data-zone="today"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="h-done-list" data-pane="done">
+          <header class="panel-head">
+            <h2 id="h-done-list">Hotovo dnes</h2>
+            <span class="count" id="count-done">0</span>
+          </header>
+          <div id="done-list" class="notes rows" data-zone="done"></div>
+        </section>
+      </div>
+
+      <section id="backlog" class="panel backlog" aria-labelledby="h-backlog" data-pane="backlog">
+        <header class="panel-head">
+          <h2 id="h-backlog">Zásobník úkolů</h2>
+          <span class="count" id="count-backlog">0</span>
+        </header>
+        <p class="muted hint">Klepnutím na lístek ho přesuneš do dnešních priorit.</p>
+        <div id="chips" class="chips"></div>
+        <div id="categories" class="cat-grid" data-zone="backlog"></div>
+      </section>
+    </main>
+
+    <nav class="tabbar" aria-label="Hlavní navigace">
+      <button class="tab" type="button" data-view="today" aria-current="page">
+        <svg class="i"><use href="#i-today"/></svg><span>Dnes</span><b id="tab-today-n" class="tab-n" hidden></b>
+      </button>
+      <button id="fab" class="fab" type="button" aria-label="Přidat úkol"><svg class="i"><use href="#i-plus"/></svg></button>
+      <button class="tab" type="button" data-view="tasks">
+        <svg class="i"><use href="#i-list"/></svg><span>Úkoly</span><b id="tab-tasks-n" class="tab-n" hidden></b>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ========== DIALOGY ========== -->
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <h2 id="edit-title">Upravit úkol</h2>
+      <div class="field">
+        <label for="edit-text">Text úkolu</label>
+        <textarea id="edit-text" rows="3" maxlength="200" required enterkeyhint="done"></textarea>
+      </div>
+      <div class="field">
+        <label for="edit-cat">Kategorie</label>
+        <select id="edit-cat"></select>
+      </div>
       <div class="dialog-actions">
-        <button type="button" id="edit-cancel" class="btn-ghost">Zrušit</button>
-        <button type="submit" class="btn-primary">Uložit</button>
+        <button type="button" class="btn" data-close>Zrušit</button>
+        <button type="submit" class="btn btn-primary">Uložit</button>
       </div>
     </form>
   </dialog>
 
+  <dialog id="cat-dialog" aria-labelledby="cat-title">
+    <form id="cat-form">
+      <h2 id="cat-title">Nová kategorie</h2>
+      <div class="field">
+        <label for="cat-name">Název</label>
+        <input id="cat-name" type="text" maxlength="40" required autocomplete="off">
+      </div>
+      <fieldset class="field">
+        <legend>Barva lístečků</legend>
+        <div id="swatches" class="swatches"></div>
+      </fieldset>
+      <p id="cat-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" id="cat-delete" class="btn btn-danger" hidden>Smazat</button>
+        <span class="grow"></span>
+        <button type="button" class="btn" data-close>Zrušit</button>
+        <button type="submit" class="btn btn-primary">Uložit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite">
+    <span id="toast-msg"></span>
+    <button id="toast-undo" type="button" hidden>Zpět</button>
+  </div>
+
+  <script src="config.js"></script>
   <script src="users.js"></script>
+  <script src="vendor/supabase.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
