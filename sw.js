@@ -1,12 +1,11 @@
 /* Service worker: aplikace se otevře i bez internetu.
    Soubory aplikace: nejdřív síť (vždy čerstvá verze), při výpadku cache.
    Písma: z cache, na pozadí se obnovují.
-   Požadavky na Supabase se nezasahují. */
+   Požadavky na api.github.com se nezasahují. */
 
-const VERSION = "stickies-v2";
+const VERSION = "stickies-v3";
 const SHELL = [
-  "./", "index.html", "style.css", "app.js", "config.js", "users.js",
-  "vendor/supabase.js", "manifest.webmanifest",
+  "./", "index.html", "style.css", "plan.js", "app.js", "manifest.webmanifest",
   "icons/favicon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 

@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Stickies – správa úkolů",
   "short_name": "Stickies",
-  "description": "Úkoly ve stylu sticky notes, synchronizované napříč zařízeními.",
+  "description": "Úkoly ve stylu sticky notes, s doporučením podle tvé energie.",
   "lang": "cs",
   "start_url": "./",
   "scope": "./",
