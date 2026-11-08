@@ -1517,7 +1517,7 @@
   });
 
   /* =====================================================================
-     Přihlášení (jméno + heslo odemkne token)
+     Přihlášení (jen jméno, token je v users.js)
      ===================================================================== */
   const usersMap = () => window.STICKIES_USERS || {};
 
@@ -1533,29 +1533,19 @@
     const err = $("login-error"), btn = $("login-submit");
     err.textContent = "";
     const name = $("login-user").value.trim().toLowerCase();
-    const pw = $("login-pw").value;
-    if (!name || !pw) { err.textContent = "Vyplň jméno i heslo."; return; }
-    btn.disabled = true; btn.textContent = "Přihlašuji…";
+    if (!name) { err.textContent = "Napiš své jméno."; return; }
+    btn.disabled = true; btn.textContent = "Otevírám…";
     try {
       const entry = usersMap()[name];
-      const cfg = entry ? await Vault.open(entry, pw) : null;
-      if (!cfg || !cfg.repo || !cfg.token) { err.textContent = "Nesprávné jméno nebo heslo."; return; }
+      const cfg = entry && entry.token ? { repo: entry.repo || window.STICKIES_REPO, token: entry.token, path: entry.path } : null;
+      if (!cfg || !cfg.repo) { err.textContent = "Takové jméno neznám. Zkontroluj, jak ho píšeš, nebo se zeptej správce."; return; }
       store.set(K.session, { user: name, cfg });
-      $("login-pw").value = "";
       start(name, cfg);
     } catch {
       err.textContent = "Přihlášení se nepovedlo. Zkus to prosím znovu.";
     } finally {
-      btn.disabled = false; btn.textContent = "Přihlásit se";
+      btn.disabled = false; btn.textContent = "Otevřít moje úkoly";
     }
-  });
-
-  $("pw-toggle").addEventListener("click", () => {
-    const pw = $("login-pw"), show = pw.type === "password";
-    pw.type = show ? "text" : "password";
-    $("pw-toggle").setAttribute("aria-pressed", String(show));
-    $("pw-toggle").setAttribute("aria-label", show ? "Skrýt heslo" : "Zobrazit heslo");
-    $("pw-toggle").replaceChildren(icon(show ? "eye-off" : "eye"));
   });
 
   async function logout() {

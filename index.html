@@ -57,15 +57,12 @@
     <form id="login-form" class="login-card" autocomplete="on">
       <div class="login-brand">
         <span class="logo logo-lg"><svg class="i"><use href="#i-tick"/></svg></span>
-        <div><p class="eyebrow" style="margin:0">Stickies</p><h1 class="login-title">Přihlášení</h1></div>
+        <div><p class="eyebrow" style="margin:0">Stickies</p><h1 class="login-title">Kdo jsi?</h1></div>
       </div>
       <div class="field"><label for="login-user">Uživatelské jméno</label>
-        <input id="login-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next"></div>
-      <div class="field"><label for="login-pw">Heslo</label>
-        <div class="pw"><input id="login-pw" type="password" autocomplete="current-password" enterkeyhint="go">
-          <button id="pw-toggle" class="icon-btn" type="button" aria-label="Zobrazit heslo" aria-pressed="false"><svg class="i"><use href="#i-eye"/></svg></button></div></div>
+        <input id="login-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="go"></div>
       <p id="login-error" class="form-error" role="alert"></p>
-      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Přihlásit se</button>
+      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Otevřít moje úkoly</button>
       <p class="fine">Po přihlášení se úkoly samy načtou. Na tomto zařízení zůstaneš přihlášená.</p>
     </form>
   </main>
@@ -412,7 +409,6 @@
     <button id="toast-undo" type="button" hidden>Zpět</button>
   </div>
 
-  <script src="vault.js"></script>
   <script src="users.js"></script>
   <script src="plan.js"></script>
   <script src="app.js"></script>

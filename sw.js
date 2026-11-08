@@ -3,9 +3,9 @@
    Písma: z cache, na pozadí se obnovují.
    Požadavky na api.github.com se nezasahují. */
 
-const VERSION = "stickies-v4";
+const VERSION = "stickies-v5";
 const SHELL = [
-  "./", "index.html", "style.css", "plan.js", "vault.js", "users.js", "app.js", "manifest.webmanifest",
+  "./", "index.html", "style.css", "plan.js", "users.js", "app.js", "manifest.webmanifest",
   "icons/favicon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 
