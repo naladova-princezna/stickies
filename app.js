@@ -24,14 +24,14 @@
   const NS = "http://www.w3.org/2000/svg";
   const EPOCH = "1970-01-01T00:00:00.000Z";
 
-  const K = {
-    data: "stickies:v3:data",
-    meta: "stickies:v3:meta",
-    gh: "stickies:v3:gh",
-    seeded: "stickies:v3:seeded",
-    lastcat: "stickies:v3:lastcat",
-    v2: "stickies:v2:local:cache",
-  };
+  const K = { session: "stickies:session", pref: "stickies:pref", v2: "stickies:v2:local:cache" };
+  let USER = null;                 // přihlášený uživatel (null = režim bez přihlášení)
+  function setNamespace(user) {
+    USER = user;
+    const p = user ? `stickies:v3:u:${user}:` : "stickies:v3:";
+    K.data = p + "data"; K.meta = p + "meta"; K.gh = p + "gh"; K.seeded = p + "seeded"; K.lastcat = p + "lastcat";
+  }
+  setNamespace(null);
 
   /* =====================================================================
      Pomocné funkce
@@ -226,8 +226,10 @@
     }
     state = normalize(raw || {});
     meta = Object.assign({ sha: null, dirty: false }, store.get(K.meta, {}));
-    gh = store.get(K.gh, null);
-    if (gh && !(gh.repo && gh.token)) gh = null;
+    if (!USER) {
+      gh = store.get(K.gh, null);
+      if (gh && !(gh.repo && gh.token)) gh = null;
+    }
     if (migrated) { store.set(K.seeded, true); persist(); }
   }
 
@@ -390,6 +392,13 @@
       let settled = false;
       for (let i = 0; i < 4 && !settled; i++) {
         const remote = await ghGetFile();
+        if (!remote && !state.categories.length && !state.tasks.length) {
+          // nový uživatel bez dat v repozitáři: výchozí kategorie
+          store.set(K.seeded, true);
+          const t0 = Date.now();
+          DEFAULT_CATS.forEach(([name, color], i) => state.categories.push({ id: uuid(), name, color, pos: t0 + i, updated_at: nowIso() }));
+          version++; persist(); render();
+        }
         // Od teď synchronně: sloučit s aktuálním stavem (uživatel mohl mezitím něco změnit).
         const merged = remote ? merge(state, remote.data) : state;
         if (canon(merged) !== canon(state)) { state = merged; version++; persist(); render(); }
@@ -412,7 +421,7 @@
       if (meta.dirty) scheduleSave(); else setSync("ok");
     } catch (err) {
       console.warn("[sync]", err);
-      if (err instanceof GhError && err.status === 401) setSync("auth", "GitHub odmítl token. Je platný a má právo Contents: Read and write?");
+      if (err instanceof GhError && err.status === 401) setSync("auth", USER ? "Token přestal platit. Odhlas se a přihlas znovu, případně požádej správce o nový záznam." : "GitHub odmítl token. Je platný a má právo Contents: Read and write?");
       else if (err instanceof GhError && err.status === 403 && /rate limit/i.test(err.message)) { setSync("error", "Překročen limit požadavků GitHubu."); retryTimer = setTimeout(sync, 120000); }
       else if (err instanceof GhError && err.status === 403) setSync("auth", "Token nemá právo zapisovat do tohoto repozitáře.");
       else if (err instanceof GhError && err.status === 404) setSync("error", "Repozitář nebo větev nenalezena (nebo k nim token nemá přístup).");
@@ -485,16 +494,38 @@
     else a.onclick = null;
     $("toast").classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(hideToast, o.ms || (o.undo || o.action ? 6000 : 3000));
+    toastTimer = setTimeout(hideToast, o.ms || (o.undo || o.action ? 8000 : 4500));
   }
   function hideToast() { $("toast").classList.remove("show"); clearTimeout(toastTimer); }
 
   /* =====================================================================
      Akce
      ===================================================================== */
+  const PRAISE = ["Hotovo.", "Odškrtnuto.", "Jedna věc míň.", "Skvělé, další hotovo.", "Dobrá práce."];
+
+  /** Malá oslava dokončení. Vypíná se v nastavení i podle systému. */
+  function celebrate(rect, big) {
+    if (reduceMotion()) return;
+    const n = big ? 42 : 14;
+    const cx = rect.left + (rect.width || 0) / 2, cy = rect.top + (rect.height || 0) / 2;
+    const colors = ["#7c6cff", "#1fe0b8", "#ff7ab0", "#ffc861", "#5cc8ff", "#a4ec7a"];
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = (big ? 140 : 60) + Math.random() * (big ? 220 : 70);
+      const s = h("span", { class: "confetti", "aria-hidden": "true" });
+      s.style.cssText = `left:${cx}px;top:${cy}px;background:${colors[i % colors.length]};--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d - 40}px;--r:${Math.round(Math.random() * 540 - 270)}deg`;
+      document.body.append(s);
+      setTimeout(() => s.remove(), 1000);
+    }
+  }
+
   const act = {
-    complete(id) {
-      commit((s) => { const t = s.tasks.find((x) => x.id === id); t.status = "done"; t.done_at = nowIso(); }, "Hotovo.");
+    complete(id, src) {
+      const rect = src ? src.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, height: 0 };
+      const open = todayOpen();
+      const last = open.length === 1 && open[0].id === id;
+      const msg = last ? "Dnešek je splněný. Teď si můžeš odpočinout." : PRAISE[doneToday().length % PRAISE.length];
+      commit((s) => { const t = s.tasks.find((x) => x.id === id); t.status = "done"; t.done_at = nowIso(); }, msg);
+      celebrate(rect, last);
     },
     reopen(id) {
       commit((s) => {
@@ -518,6 +549,37 @@
         const st = s.tasks.find((x) => x.id === tid).steps.find((x) => x.id === sid);
         st.done = !st.done;
       });
+    },
+    addStep(tid, text) {
+      const v = String(text || "").trim();
+      if (!v) return;
+      commit((s) => { s.tasks.find((x) => x.id === tid).steps.push({ id: uuid(), text: v.slice(0, 200), done: false }); });
+    },
+    removeStep(tid, sid) {
+      commit((s) => { const t = s.tasks.find((x) => x.id === tid); t.steps = t.steps.filter((x) => x.id !== sid); });
+    },
+    template(tid) {
+      commit((s) => {
+        const t = s.tasks.find((x) => x.id === tid);
+        const have = t.steps.map((x) => x.text);
+        STEP_TEMPLATE.filter((x) => !have.includes(x)).forEach((x) => t.steps.push({ id: uuid(), text: x, done: false }));
+      });
+    },
+    /** Z nesplněných kroků vzniknou samostatné lehké úkoly ve stejné kategorii. */
+    split(tid) {
+      const src = taskById(tid);
+      if (!src) return;
+      const todo = src.steps.filter((x) => !x.done);
+      if (!todo.length) return;
+      commit((s) => {
+        const t = s.tasks.find((x) => x.id === tid);
+        const base = Date.now();
+        todo.forEach((st, i) => s.tasks.push({
+          id: uuid(), category_id: t.category_id, text: st.text, status: t.status === "done" ? "backlog" : t.status,
+          done_at: null, pos: base + i, effort: "light", steps: [], updated_at: nowIso(),
+        }));
+        t.deleted = true;
+      }, `Rozděleno na ${todo.length} ${plural(todo.length, "úkol", "úkoly", "úkolů")}.`);
     },
   };
 
@@ -554,7 +616,9 @@
     if (ROUTE.name === "kat" && !catById(ROUTE.id)) { ROUTE = { name: "dnes" }; history.replaceState(null, "", "#/dnes"); }
 
     const active = document.activeElement;
-    const focusKey = active && active.dataset ? active.dataset.k : null;
+    const focusKey = pendingFocus || (active && active.dataset ? active.dataset.k : null);
+    const typed = active && active.tagName === "INPUT" && active.dataset && active.dataset.k ? active.value : null;
+    pendingFocus = null;
 
     renderSide();
     $("view-today").hidden = ROUTE.name !== "dnes";
@@ -564,12 +628,14 @@
     else if (ROUTE.name === "zasobnik") renderBacklog();
     else renderCat();
     renderComposerOptions();
-    document.title = ROUTE.name === "kat" ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : "Dnes · Stickies";
+    setTitle();
 
     if (focusKey) {
       const el = document.querySelector(`[data-k="${CSS.escape(focusKey)}"]`);
       if (el && el !== active) el.focus({ preventScroll: true });
+      if (el && typed && el.tagName === "INPUT" && !el.value) el.value = typed;
     }
+    renderFocus();
   }
 
   function setBadge(id, n) { const el = $(id); el.textContent = n; el.hidden = !n; }
@@ -596,15 +662,57 @@
   }
 
   /* ---------- Lístek ---------- */
+  const TODAY_LIMIT = 5, COL_LIMIT = 6;
+  const openNotes = new Map();          // id úkolu → rozbalen?
+  const ui = { allToday: false, allBack: {} };
+  let pendingFocus = null;
+
+  const isOpenNote = (t, o) => t.status !== "done" && (openNotes.has(t.id) ? openNotes.get(t.id) : Boolean(o.now && t.steps.length));
+  function openSteps(id) { openNotes.set(id, true); pendingFocus = "addstep:" + id; render(); }
+
+  function stepsPanel(t) {
+    const panel = h("div", { class: "steps-panel" });
+    if (t.steps.length) {
+      panel.append(h("ul", { class: "steps" }, t.steps.map((s) => h("li", { class: "step-li" },
+        h("button", {
+          type: "button", class: "step" + (s.done ? " is-done" : ""), "data-k": `step:${t.id}:${s.id}`, "aria-pressed": String(s.done),
+          on: { click: (e) => { e.stopPropagation(); act.step(t.id, s.id); } },
+        }, h("span", { class: "box" }, icon("tick")), h("span", { class: "st-text" }, s.text)),
+        h("button", {
+          type: "button", class: "step-x", "aria-label": `Odebrat krok: ${s.text}`, title: "Odebrat krok", "data-k": `stepx:${t.id}:${s.id}`,
+          on: { click: (e) => { e.stopPropagation(); act.removeStep(t.id, s.id); } },
+        }, icon("x"))))));
+    } else {
+      panel.append(h("p", { class: "steps-empty" }, "Rozděl úkol na malé kroky. Stačí ty první, každý na pár minut."));
+    }
+    const input = h("input", {
+      type: "text", maxlength: "200", placeholder: t.steps.length ? "Další krok…" : "První krok…",
+      "aria-label": "Nový krok", "data-k": "addstep:" + t.id, enterkeyhint: "done", autocomplete: "off",
+    });
+    panel.append(h("form", {
+      class: "step-add",
+      on: { submit: (e) => { e.preventDefault(); e.stopPropagation(); const v = input.value; input.value = ""; act.addStep(t.id, v); } },
+    }, input, h("button", { class: "icon-btn", type: "submit", "aria-label": "Přidat krok" }, icon("plus"))));
+    const links = h("div", { class: "step-links" });
+    if (!t.steps.length) {
+      links.append(h("button", { type: "button", class: "link-btn", "data-k": "tpl:" + t.id, on: { click: (e) => { e.stopPropagation(); act.template(t.id); } } }, "Vložit šablonu kroků"));
+    } else {
+      links.append(h("button", { type: "button", class: "link-btn", "data-k": "split:" + t.id, on: { click: (e) => { e.stopPropagation(); act.split(t.id); } } }, "Udělat z kroků samostatné úkoly"));
+    }
+    panel.append(links);
+    return panel;
+  }
+
   function noteEl(t, mode, o = {}) {
     const c = catById(t.category_id) || { color: "violet", name: "?" };
     const done = t.status === "done";
     const stepsDone = t.steps.filter((s) => s.done).length;
     const flag = !done && t.effort === "hard" && !t.steps.length;
+    const open = isOpenNote(t, o);
     const fits = Boolean(o.fits);
 
     const el = h("article", {
-      class: `note c-${c.color} is-${mode}${fits ? " fits" : ""}${t.effort === "hard" ? " is-hard" : ""}`,
+      class: `note c-${c.color} is-${mode}${open ? " is-open" : ""}${fits ? " fits" : ""}${o.now ? " is-now" : ""}${t.effort === "hard" ? " is-hard" : ""}`,
       "data-id": t.id,
     });
 
@@ -612,25 +720,26 @@
       class: "check", type: "button", "data-k": "check:" + t.id,
       "aria-label": done ? `Vrátit mezi otevřené: ${t.text}` : `Hotovo: ${t.text}`,
       title: done ? "Vrátit zpět" : "Označit jako hotové",
-      on: { click: (e) => { e.stopPropagation(); done ? act.reopen(t.id) : act.complete(t.id); } },
+      on: { click: (e) => { e.stopPropagation(); done ? act.reopen(t.id) : act.complete(t.id, e.currentTarget); } },
     }, icon(done ? "check-filled" : "circle"));
 
-    const main = h("div", { class: "note-main" }, h("p", { class: "note-text" }, t.text));
-
-    if (t.steps.length && !done) {
-      main.append(h("ul", { class: "steps" }, t.steps.map((s) => h("li", null,
-        h("button", {
-          type: "button", class: "step" + (s.done ? " is-done" : ""), "data-k": `step:${t.id}:${s.id}`,
-          "aria-pressed": String(s.done),
-          on: { click: (e) => { e.stopPropagation(); act.step(t.id, s.id); } },
-        }, h("span", { class: "box" }, icon("tick")), h("span", { class: "st-text" }, s.text))))));
-    }
+    const main = h("div", { class: "note-main" },
+      h("div", { class: "note-title" }, o.now ? h("span", { class: "now-badge" }, "Teď") : null, h("p", { class: "note-text" }, t.text)));
+    if (open) main.append(stepsPanel(t));
 
     const foot = h("div", { class: "note-foot" });
     if (!o.hideCat) foot.append(h("span", { class: "chip" }, c.name));
     foot.append(h("span", { class: `eff eff-${t.effort}`, title: EFFORT_LABEL[t.effort] + " úkol" },
       h("i"), h("i"), h("i"), h("span", { class: "sr-only" }, EFFORT_LABEL[t.effort])));
-    if (t.steps.length) foot.append(h("span", { class: "chip" }, `${stepsDone}/${t.steps.length} kroků`));
+    if (!done && (t.steps.length || !flag || open)) {
+      foot.append(h("button", {
+        type: "button", class: "pill pill-sm", "data-k": "tog:" + t.id, "aria-expanded": String(open),
+        title: open ? "Sbalit kroky" : t.steps.length ? "Ukázat kroky" : "Rozepsat na kroky",
+        on: { click: (e) => { e.stopPropagation(); if (open) { openNotes.set(t.id, false); render(); } else openSteps(t.id); } },
+      }, t.steps.length ? `${stepsDone}/${t.steps.length} kroků` : "Rozepsat", icon("chevron")));
+    } else if (done && t.steps.length) {
+      foot.append(h("span", { class: "chip" }, `${stepsDone}/${t.steps.length} kroků`));
+    }
     if (done && t.done_at) foot.append(h("span", { class: "time" }, isToday(t.done_at) ? fmtTime(t.done_at) : fmtDate(t.done_at)));
     if (fits) foot.append(h("span", { class: "chip chip-fit" }, "Sedí na dnes"));
 
@@ -638,21 +747,26 @@
     if (mode === "backlog") {
       tools.append(h("button", { class: "pill", type: "button", "data-k": "today:" + t.id, "aria-label": `Přesunout na dnes: ${t.text}`, on: { click: (e) => { e.stopPropagation(); act.toToday(t.id); } } }, "Na dnes", icon("arrow-right")));
     }
-    if (mode === "today") tools.append(iconBtn("undo", "Vrátit do zásobníku", () => act.toBacklog(t.id), "back:" + t.id));
+    if (mode === "today") {
+      tools.append(iconBtn("play", "Soustředit se na tenhle úkol", () => openFocus(t.id), "focus:" + t.id));
+      tools.append(iconBtn("undo", "Vrátit do zásobníku", () => act.toBacklog(t.id), "back:" + t.id));
+    }
     if (!done) tools.append(iconBtn("edit", "Upravit", () => openEdit(t.id), "edit:" + t.id));
     tools.append(iconBtn("trash", "Smazat", () => act.remove(t.id), "del:" + t.id));
     foot.append(tools);
     main.append(foot);
 
-    if (flag) {
-      main.append(h("button", {
-        class: "flag", type: "button", "data-k": "flag:" + t.id,
-        on: { click: (e) => { e.stopPropagation(); openEdit(t.id, { steps: true }); } },
-      }, icon("sparkle"), h("span", null, "Náročný úkol: rozepiš ho na kroky")));
+    if (flag && !open) {
+      main.append(h("button", { class: "flag", type: "button", "data-k": "flag:" + t.id, on: { click: (e) => { e.stopPropagation(); openSteps(t.id); } } },
+        icon("sparkle"), h("span", null, "Náročný úkol: rozepiš ho na kroky")));
+    }
+    if (o.now && mode === "today") {
+      main.append(h("button", { class: "btn-now", type: "button", "data-k": "start:" + t.id, on: { click: (e) => { e.stopPropagation(); openFocus(t.id); } } },
+        icon("play"), "Začít soustředění"));
     }
 
     el.append(check, main);
-    if (mode === "backlog") el.addEventListener("click", (e) => { if (!e.target.closest("button")) act.toToday(t.id); });
+    if (mode === "backlog") el.addEventListener("click", (e) => { if (!e.target.closest("button,input,form,a,.steps-panel")) act.toToday(t.id); });
     return el;
   }
 
@@ -664,7 +778,25 @@
   const emptyEl = (title, text, extra) => h("div", { class: "empty" },
     h("strong", null, title), text ? h("p", null, text) : null, extra || null);
 
+  const moreBtn = (key, shown, hidden, toggle) => h("button", { class: "more-btn", type: "button", "data-k": "more:" + key, "aria-expanded": String(shown), on: { click: toggle } },
+    shown ? "Ukázat méně" : `Ukázat dalších ${hidden}`);
+
   /* ---------- Dnes ---------- */
+  function renderTodayList(open) {
+    const box = $("today-list");
+    if (!open.length) {
+      box.replaceChildren(emptyEl("Zatím nic na dnes", "Vyber úkol ze zásobníku, přidej nový, nebo nech vybrat mě.",
+        h("div", { class: "empty-actions" },
+          h("button", { class: "btn btn-primary", type: "button", on: { click: pickForMe } }, icon("shuffle"), "Vyber za mě"),
+          h("a", { class: "btn", href: "#/zasobnik" }, "Projít zásobník"))));
+      return;
+    }
+    const shown = ui.allToday ? open : open.slice(0, TODAY_LIMIT);
+    const els = shown.map((t, i) => noteEl(t, "today", { now: i === 0 }));
+    if (open.length > TODAY_LIMIT) els.push(moreBtn("today", ui.allToday, open.length - TODAY_LIMIT, () => { ui.allToday = !ui.allToday; render(); }));
+    box.replaceChildren(...els);
+  }
+
   function renderToday() {
     const open = todayOpen(), done = doneToday();
     $("date").textContent = capitalize(new Date().toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "long" }));
@@ -678,10 +810,8 @@
     $("count-today").textContent = open.length;
     $("count-done").textContent = done.length;
 
-    fillList($("today-list"), open, "today",
-      emptyEl("Zatím nic na dnes", "Vyber úkoly ze zásobníku nebo přidej nový. Doporučení výš ti řekne, kolik jich dnes dává smysl.",
-        h("a", { class: "btn", href: "#/zasobnik" }, "Vybrat ze zásobníku")));
-    fillList($("done-list"), done, "done", emptyEl("Zatím nic hotového", "Co dokončíš, se objeví tady."), { hideCat: false });
+    renderTodayList(open);
+    fillList($("done-list"), done, "done", emptyEl("Zatím nic hotového", "Co dokončíš, se objeví tady."), {});
     renderEnergy(open, done);
   }
 
@@ -691,10 +821,34 @@
     return { energy: 60, load: 40, set: false };
   }
 
-  let lastEval = null;
+  function computeEval() {
+    const v = dayValues();
+    const rec = Plan.recommend(v.energy, v.load);
+    return { rec, ev: Plan.evaluate(rec, [...todayOpen(), ...doneToday()]) };
+  }
 
-  let energyOpen = null;           // null = automaticky: sbaleno, jakmile je stav dne zadán
+  let energyOpen = null;           // null = výchozí: na mobilu sbaleno
   const energyIsOpen = () => (energyOpen === null ? false : energyOpen);
+
+  const PRESETS = { energy: [[20, "Na dně"], [55, "Průměr"], [90, "Plná sil"]], load: [[15, "Volno"], [50, "Středně"], [85, "Nabitý den"]] };
+  function setSlider(id, v) {
+    const e = $(id);
+    e.value = v;
+    e.dispatchEvent(new Event("input", { bubbles: true }));
+    e.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function buildPresets() {
+    for (const [kind, id] of [["energy", "energy-range"], ["load", "load-range"]]) {
+      $(kind + "-presets").replaceChildren(...PRESETS[kind].map(([v, label]) => h("button", {
+        type: "button", class: "preset", "data-v": v, on: { click: () => setSlider(id, v) },
+      }, label)));
+    }
+  }
+  function markPresets(energy, load) {
+    for (const [kind, val] of [["energy", energy], ["load", load]]) {
+      qa(".preset", $(kind + "-presets")).forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.v === val)));
+    }
+  }
 
   function renderEnergy(open, done) {
     const v = dayValues();
@@ -708,11 +862,11 @@
   function paintEnergy(energy, load, open = todayOpen(), done = doneToday()) {
     const rec = Plan.recommend(energy, load);
     const ev = Plan.evaluate(rec, [...open, ...done]);
-    lastEval = { rec, ev };
 
     $("energy-val").textContent = rec.energy + " %";
     $("load-val").textContent = rec.load + " %";
     er_style($("energy-range"), rec.energy); er_style($("load-range"), rec.load);
+    markPresets(rec.energy, rec.load);
     const z = $("energy-zone");
     z.textContent = rec.zone.label;
     z.className = "zone zone-" + rec.zone.id;
@@ -747,8 +901,11 @@
       ev.need.forEach((k) => { cnt[k] = (cnt[k] || 0) + 1; });
       const words = ["hard", "medium", "light"].filter((k) => cnt[k]).map((k) =>
         `${cnt[k]} ${k === "hard" ? plural(cnt[k], "náročný", "náročné", "náročných") : k === "medium" ? plural(cnt[k], "střední", "střední", "středních") : plural(cnt[k], "lehký", "lehké", "lehkých")}`);
-      lines.push(h("p", { class: "rec-status" }, icon("sparkle"), h("span", null, `Ještě se vejde: ${words.join(", ")}. `),
-        h("a", { href: "#/zasobnik", class: "inline-link" }, "Vybrat ze zásobníku")));
+      lines.push(h("div", { class: "rec-status" }, icon("sparkle"), h("div", { class: "rec-fit" },
+        h("span", null, `Ještě se vejde: ${words.join(", ")}.`),
+        h("div", { class: "rec-fit-actions" },
+          h("button", { type: "button", class: "btn btn-sm", on: { click: pickForMe } }, icon("shuffle"), "Vyber za mě"),
+          h("a", { href: "#/zasobnik", class: "inline-link" }, "Projít zásobník")))));
     } else if (rec.total) {
       lines.push(h("p", { class: "rec-status is-ok" }, icon("tick"), h("span", null, "Plán na dnes sedí.")));
     }
@@ -765,7 +922,6 @@
       h("p", null, "Je to rozumná pomůcka, ne měření. Opírá se o tři zásady: náročná práce patří na chvíle s nejvyšší energií, rozpracovaných priorit má být málo a plánuje se na zhruba 70 % možností. Pokud ti čísla nesedí, dají se doladit v souboru plan.js."));
     out.replaceChildren(head, meter, ...lines, tips, how);
 
-    // Sbalený pohled (mobil): jedna věta místo celé karty
     const brief = $("energy-brief");
     const isSet = dayValues().set;
     brief.replaceChildren(!isSet ? "Zadej energii a vytížení a dostaneš doporučení na dnešek." : rec.total
@@ -786,10 +942,22 @@
 
   /* ---------- Zásobník ---------- */
   function fitSet() {
-    const set = new Set();
-    if (lastEval && lastEval.ev && lastEval.ev.over === 0) lastEval.ev.need.forEach((k) => set.add(k));
-    return set;
+    const { ev } = computeEval();
+    return new Set(ev.over === 0 ? ev.need : []);
   }
+
+  /** Rozhodovat se je náročné: vybere úkol, který se k dnešku hodí. */
+  function pickForMe() {
+    const back = liveTasks().filter((t) => t.status === "backlog");
+    if (!back.length) { toast("Zásobník je prázdný. Přidej úkol a pak ti pomůžu vybrat."); return; }
+    const fit = fitSet();
+    let pool = back.filter((t) => fit.has(t.effort));
+    if (!pool.length) pool = back.filter((t) => t.effort === "light");
+    if (!pool.length) pool = back;
+    const t = pool[Math.floor(Math.random() * pool.length)];
+    commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Vybráno na dnes: ${t.text}`);
+  }
+  $("pick-me").addEventListener("click", pickForMe);
 
   function renderBacklog() {
     const cats = liveCats();
@@ -804,6 +972,8 @@
     }
     grid.replaceChildren(...cats.map((c) => {
       const list = backlogOf(c.id);
+      const all = Boolean(ui.allBack[c.id]);
+      const shown = all ? list : list.slice(0, COL_LIMIT);
       const col = h("section", { class: `cat-col c-${c.color}` });
       col.append(h("div", { class: "cat-head" },
         h("span", { class: "dot" }),
@@ -811,8 +981,9 @@
         h("span", { class: "count" }, String(list.length)),
         iconBtn("plus", `Přidat úkol do kategorie ${c.name}`, () => openComposer(c.id), "addto:" + c.id)));
       const notes = h("div", { class: "notes" });
-      fillList(notes, list, "backlog", h("button", { class: "empty", type: "button", on: { click: () => openComposer(c.id) } },
+      fillList(notes, shown, "backlog", h("button", { class: "empty", type: "button", on: { click: () => openComposer(c.id) } },
         h("strong", null, "Prázdno"), h("p", null, "Přidej první úkol")), (t) => ({ hideCat: true, fits: fit.has(t.effort) }));
+      if (list.length > COL_LIMIT) notes.append(moreBtn("b" + c.id, all, list.length - COL_LIMIT, () => { ui.allBack[c.id] = !all; render(); }));
       col.append(notes);
       return col;
     }));
@@ -835,7 +1006,7 @@
       h("button", { class: "empty", type: "button", on: { click: () => openComposer(c.id) } },
         h("strong", null, "Zásobník je prázdný"), h("p", null, "Přidej první úkol do této kategorie")), { hideCat: true });
     fillList($("cat-archive-list"), arch, "done", h("p", { class: "muted pad" }, "Zatím nic."), { hideCat: true });
-    $("cat-archive").hidden = !arch.length && true;
+    $("cat-archive").hidden = !arch.length;
   }
 
   /* ---------- Přidání úkolu ---------- */
@@ -896,7 +1067,7 @@
       ? { action: { label: "Rozepsat", fn: () => openEdit(id, { steps: true }) }, ms: 8000 } : {});
     $("add-text").value = "";
     buildSeg($("add-effort"), "add-effort", "medium");
-    if (isMobile()) closeComposer(); else $("add-text").focus();
+    $("add-text").focus();
   });
 
   $("fab").addEventListener("click", () => openComposer());
@@ -1076,12 +1247,18 @@
     const connected = Boolean(gh);
     $("st-form-block").hidden = connected;
     $("st-connected-block").hidden = !connected;
+    $("st-disconnect").hidden = Boolean(USER);
+    $("st-logout").hidden = !USER;
+    $("st-conn-note").textContent = USER
+      ? "Odhlášení smaže z tohoto zařízení token i místní kopii dat. Na GitHubu zůstávají."
+      : "Odpojení smaže z tohoto zařízení token. Data v repozitáři i lokální kopie zůstávají.";
     const [txt, cls] = SYNC[syncKind];
     box.className = "st-status " + cls;
     box.replaceChildren(h("span", { class: "dot-s" }),
       h("div", null,
         h("strong", null, connected ? txt : "Data jsou jen v tomto zařízení"),
-        connected ? h("p", null, `${gh.repo} · ${gh.path}`) : h("p", null, "Připoj soukromý repozitář na GitHubu a úkoly budou na všech zařízeních."),
+        connected ? h("p", null, USER ? `Přihlášena jako ${USER} · ${gh.path}` : `${gh.repo} · ${gh.path}`)
+          : h("p", null, "Připoj soukromý repozitář na GitHubu a úkoly budou na všech zařízeních."),
         syncDetail ? h("p", { class: "st-detail" }, syncDetail) : null));
   }
 
@@ -1172,11 +1349,240 @@
   }
 
   /* =====================================================================
+     Pohodlí a vzhled (nastavení tohoto zařízení)
+     ===================================================================== */
+  const FS_OPTIONS = [[1, "Normální"], [1.15, "Větší"], [1.3, "Největší"]];
+  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true }, store.get(K.pref, {}));
+  const reduceMotion = () => prefs.still || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function applyPrefs() {
+    const r = document.documentElement;
+    r.style.setProperty("--fs", String(prefs.fs));
+    r.dataset.calm = prefs.calm ? "1" : "0";
+    r.dataset.still = prefs.still ? "1" : "0";
+  }
+  function savePrefs() { store.set(K.pref, prefs); applyPrefs(); }
+  function buildPrefs() {
+    $("pref-fs").replaceChildren(...FS_OPTIONS.map(([v, label]) => h("label", { class: "seg" },
+      h("input", Object.assign({ type: "radio", name: "pref-fs", value: String(v) }, prefs.fs === v ? { checked: true } : {})),
+      h("span", null, label))));
+    $("pref-fs").addEventListener("change", (e) => { prefs.fs = +e.target.value; savePrefs(); });
+    for (const [id, key] of [["pref-calm", "calm"], ["pref-still", "still"], ["pref-sound", "sound"]]) {
+      $(id).checked = Boolean(prefs[key]);
+      $(id).addEventListener("change", () => { prefs[key] = $(id).checked; savePrefs(); });
+    }
+  }
+  $("open-prefs").addEventListener("click", () => { closeSide(); $("prefs-dialog").showModal(); });
+
+  /* =====================================================================
+     Soustředění: jeden úkol, viditelný čas
+     ===================================================================== */
+  const FOCUS_DEFAULT = { light: 10, medium: 25, hard: 25 };
+  const FOCUS_PRESETS = [5, 15, 25, 45];
+  const CIRC = 628.32;
+  const focus = { id: null, dur: 0, left: 0, endAt: 0, running: false, finished: false, kind: "work", timer: null, msg: "" };
+  const fmtClock = (ms) => { const s = Math.ceil(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+  let audio = null;
+
+  function unlockAudio() {
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === "suspended") audio.resume(); } catch { /* bez zvuku */ }
+  }
+  function beep() {
+    if (!prefs.sound || !audio) return;
+    try {
+      const t0 = audio.currentTime;
+      [660, 880].forEach((f, i) => {
+        const o = audio.createOscillator(), g = audio.createGain(), t = t0 + i * 0.28;
+        o.frequency.value = f; o.connect(g); g.connect(audio.destination);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.18, t + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+        o.start(t); o.stop(t + 0.28);
+      });
+    } catch { /* nic */ }
+  }
+
+  function pageTitle() {
+    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : "Dnes · Stickies";
+  }
+  function setTitle() { document.title = focus.running ? `⏱ ${fmtClock(focus.left)} · Stickies` : pageTitle(); }
+
+  function updateClock() {
+    $("focus-time").textContent = fmtClock(focus.left);
+    $("focus-ring").style.strokeDashoffset = String(CIRC * (1 - (focus.dur ? focus.left / focus.dur : 0)));
+    setTitle();
+  }
+
+  function renderFocus() {
+    setTitle();
+    const d = $("focus-dialog");
+    if (!d.open) return;
+    const t = taskById(focus.id);
+    if (!t || t.status === "done") { d.close(); return; }
+    const c = catById(t.category_id) || { color: "violet", name: "" };
+    d.className = `focus c-${c.color}`;
+    $("focus-title").textContent = t.text;
+    $("focus-cat").textContent = c.name;
+    $("focus-kind").textContent = focus.kind === "break" ? "Pauza" : "Soustředění";
+    updateClock();
+
+    $("focus-presets").replaceChildren(...FOCUS_PRESETS.map((m) => h("button", {
+      type: "button", class: "preset", "aria-pressed": String(focus.kind === "work" && focus.dur === m * 60000),
+      on: { click: () => setFocusDur(m) },
+    }, `${m} min`)));
+
+    const tog = $("focus-toggle");
+    tog.hidden = focus.finished;
+    tog.replaceChildren(icon(focus.running ? "pause" : "play"), focus.running ? "Pauza" : focus.left < focus.dur ? "Pokračovat" : "Začít");
+    $("focus-more").hidden = !(focus.finished && focus.kind === "work");
+    $("focus-break").hidden = !(focus.finished && focus.kind === "work");
+
+    $("focus-msg").textContent = focus.finished ? "Čas vypršel. Co dál?"
+      : focus.running ? (focus.kind === "break" ? "Odpočívej. Vstaň, napij se, protáhni se." : "Dělej jen tohle. Zbytek počká.")
+      : focus.left < focus.dur ? "Pozastaveno."
+      : focus.msg || "Stačí začít. Klidně jen na 5 minut.";
+
+    $("focus-steps").replaceChildren(...t.steps.map((s) => h("li", { class: "step-li" },
+      h("button", {
+        type: "button", class: "step" + (s.done ? " is-done" : ""), "data-k": "fstep:" + s.id, "aria-pressed": String(s.done),
+        on: { click: () => act.step(t.id, s.id) },
+      }, h("span", { class: "box" }, icon("tick")), h("span", { class: "st-text" }, s.text)))));
+  }
+
+  function tick() {
+    if (!focus.running) return;
+    focus.left = Math.max(0, focus.endAt - Date.now());
+    if (focus.left === 0) finishFocus(); else updateClock();
+  }
+  function startTimer() {
+    unlockAudio();
+    focus.running = true; focus.finished = false;
+    focus.endAt = Date.now() + focus.left;
+    clearInterval(focus.timer);
+    focus.timer = setInterval(tick, 250);
+    renderFocus();
+  }
+  function pauseTimer() { tick(); focus.running = false; clearInterval(focus.timer); renderFocus(); }
+  function stopFocus() { clearInterval(focus.timer); focus.running = false; focus.finished = false; focus.id = null; setTitle(); }
+  function setFocusDur(m) {
+    focus.kind = "work"; focus.dur = m * 60000; focus.left = focus.dur; focus.finished = false;
+    if (focus.running) focus.endAt = Date.now() + focus.left;
+    renderFocus();
+  }
+  function finishFocus() {
+    clearInterval(focus.timer);
+    focus.running = false; focus.left = 0;
+    beep();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    const t = taskById(focus.id);
+    if (focus.kind === "break") {
+      const mins = t ? FOCUS_DEFAULT[t.effort] : 25;
+      Object.assign(focus, { kind: "work", dur: mins * 60000, left: mins * 60000, finished: false, msg: "Pauza skončila. Jdeš dál?" });
+    } else focus.finished = true;
+    if (!$("focus-dialog").open) {
+      toast(focus.kind === "work" && !focus.finished ? "Pauza skončila." : `Čas vypršel: ${t ? t.text : ""}`,
+        { action: t ? { label: "Otevřít", fn: () => openFocus(focus.id, true) } : null, ms: 20000 });
+    }
+    renderFocus();
+  }
+
+  function openFocus(id, keep) {
+    const t = taskById(id);
+    if (!t) return;
+    if (!(keep && focus.id === id)) {
+      clearInterval(focus.timer);
+      Object.assign(focus, { id, kind: "work", dur: FOCUS_DEFAULT[t.effort] * 60000, running: false, finished: false, msg: "" });
+      focus.left = focus.dur;
+    }
+    const d = $("focus-dialog");
+    if (!d.open) d.showModal();
+    renderFocus();
+    $("focus-toggle").focus();
+  }
+
+  $("focus-toggle").addEventListener("click", () => (focus.running ? pauseTimer() : startTimer()));
+  $("focus-more").addEventListener("click", () => { focus.kind = "work"; focus.dur = 10 * 60000; focus.left = focus.dur; startTimer(); });
+  $("focus-break").addEventListener("click", () => { focus.kind = "break"; focus.dur = 5 * 60000; focus.left = focus.dur; startTimer(); });
+  $("focus-close").addEventListener("click", () => $("focus-dialog").close());
+  $("focus-dialog").addEventListener("close", () => {
+    if (focus.running) toast("Časovač běží dál na pozadí.", { action: { label: "Otevřít", fn: () => openFocus(focus.id, true) } });
+  });
+  $("focus-done").addEventListener("click", () => {
+    const id = focus.id;
+    if (!id) return;
+    const rect = $("focus-done").getBoundingClientRect();
+    stopFocus();
+    $("focus-dialog").close();
+    act.complete(id, { getBoundingClientRect: () => rect });
+  });
+
+  /* =====================================================================
+     Přihlášení (jméno + heslo odemkne token)
+     ===================================================================== */
+  const usersMap = () => window.STICKIES_USERS || {};
+
+  function showLogin(msg) {
+    $("app").hidden = true;
+    $("login").hidden = false;
+    $("login-error").textContent = msg || "";
+    $("login-user").focus();
+  }
+
+  $("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $("login-error"), btn = $("login-submit");
+    err.textContent = "";
+    const name = $("login-user").value.trim().toLowerCase();
+    const pw = $("login-pw").value;
+    if (!name || !pw) { err.textContent = "Vyplň jméno i heslo."; return; }
+    btn.disabled = true; btn.textContent = "Přihlašuji…";
+    try {
+      const entry = usersMap()[name];
+      const cfg = entry ? await Vault.open(entry, pw) : null;
+      if (!cfg || !cfg.repo || !cfg.token) { err.textContent = "Nesprávné jméno nebo heslo."; return; }
+      store.set(K.session, { user: name, cfg });
+      $("login-pw").value = "";
+      start(name, cfg);
+    } catch {
+      err.textContent = "Přihlášení se nepovedlo. Zkus to prosím znovu.";
+    } finally {
+      btn.disabled = false; btn.textContent = "Přihlásit se";
+    }
+  });
+
+  $("pw-toggle").addEventListener("click", () => {
+    const pw = $("login-pw"), show = pw.type === "password";
+    pw.type = show ? "text" : "password";
+    $("pw-toggle").setAttribute("aria-pressed", String(show));
+    $("pw-toggle").setAttribute("aria-label", show ? "Skrýt heslo" : "Zobrazit heslo");
+    $("pw-toggle").replaceChildren(icon(show ? "eye-off" : "eye"));
+  });
+
+  async function logout() {
+    if (gh && meta.dirty) await sync();
+    if (meta.dirty && !confirm("Některé změny se ještě neuložily na GitHub a po odhlášení se ztratí. Odhlásit se přesto?")) return;
+    ["data", "meta", "seeded", "lastcat", "gh"].forEach((k) => store.del(`stickies:v3:u:${USER}:${k}`));
+    store.del(K.session);
+    location.reload();
+  }
+  $("side-logout").addEventListener("click", logout);
+  $("st-logout").addEventListener("click", logout);
+
+  /* =====================================================================
      Start
      ===================================================================== */
-  function boot() {
+  let bound = false;
+
+  function start(user, cfg) {
+    setNamespace(user);
     loadLocal();
+    if (user) gh = { repo: cfg.repo, token: cfg.token, path: cfg.path || `data/${user}.json`, branch: cfg.branch || "" };
+    $("login").hidden = true;
+    $("app").hidden = false;
+    $("side-logout").hidden = !user;
+    $("side-logout-t").textContent = user ? `Odhlásit se (${user})` : "Odhlásit se";
     buildSeg($("add-effort"), "add-effort", "medium");
+    buildPresets();
     if (needsSeed()) {
       state = { categories: [], tasks: [], day: null };
       seedDefaults();
@@ -1188,11 +1594,13 @@
     render();
     if (gh) sync();
 
+    if (bound) return;
+    bound = true;
     window.addEventListener("hashchange", () => applyRoute(false));
     window.addEventListener("online", () => { refresh(); });
     window.addEventListener("offline", () => { if (gh) setSync("offline"); });
     window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); render(); } });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); render(); tick(); } });
     setInterval(() => { if (gh && !document.hidden && !meta.dirty) sync(); }, POLL_MS);
     let lastDay = dayKey();
     setInterval(() => { if (dayKey() !== lastDay) { lastDay = dayKey(); render(); } }, 60000);
@@ -1206,6 +1614,19 @@
 
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
       navigator.serviceWorker.register("sw.js").catch(() => { /* bez offline režimu to jde taky */ });
+    }
+  }
+
+  function boot() {
+    applyPrefs();
+    buildPrefs();
+    const users = usersMap();
+    if (Object.keys(users).length) {
+      const s = store.get(K.session, null);
+      if (s && users[s.user] && s.cfg && s.cfg.repo && s.cfg.token) start(s.user, s.cfg);
+      else showLogin();
+    } else {
+      start(null, null);
     }
   }
 

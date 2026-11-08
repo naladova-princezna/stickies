@@ -40,12 +40,37 @@
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19.5 11 3.5 3.5 0 0 1 18 18Z"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5Z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3.2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20Z"/><path d="M12 10v5M12 18h.01"/></symbol>
   </svg>
 
   <a class="skip" href="#main">Přeskočit na obsah</a>
 
-  <div id="app" class="layout">
+  <!-- ========== PŘIHLÁŠENÍ ========== -->
+  <main id="login" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <div class="login-brand">
+        <span class="logo logo-lg"><svg class="i"><use href="#i-tick"/></svg></span>
+        <div><p class="eyebrow" style="margin:0">Stickies</p><h1 class="login-title">Přihlášení</h1></div>
+      </div>
+      <div class="field"><label for="login-user">Uživatelské jméno</label>
+        <input id="login-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next"></div>
+      <div class="field"><label for="login-pw">Heslo</label>
+        <div class="pw"><input id="login-pw" type="password" autocomplete="current-password" enterkeyhint="go">
+          <button id="pw-toggle" class="icon-btn" type="button" aria-label="Zobrazit heslo" aria-pressed="false"><svg class="i"><use href="#i-eye"/></svg></button></div></div>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Přihlásit se</button>
+      <p class="fine">Po přihlášení se úkoly samy načtou. Na tomto zařízení zůstaneš přihlášená.</p>
+    </form>
+  </main>
+
+  <div id="app" class="layout" hidden>
 
     <!-- ========== BOČNÍ LIŠTA ========== -->
     <aside id="sidebar" class="sidebar" aria-label="Navigace">
@@ -74,6 +99,8 @@
         <button id="sync" class="sync warn" type="button" aria-haspopup="dialog">
           <span class="dot-s"></span><span id="sync-text">Jen v tomto zařízení</span>
         </button>
+        <button id="open-prefs" class="foot-btn" type="button" aria-haspopup="dialog"><svg class="i"><use href="#i-gear"/></svg>Pohodlí a vzhled</button>
+        <button id="side-logout" class="foot-btn" type="button" hidden><svg class="i"><use href="#i-logout"/></svg><span id="side-logout-t">Odhlásit se</span></button>
       </div>
     </aside>
     <div id="scrim-side" class="scrim scrim-side"></div>
@@ -140,11 +167,13 @@
             <div class="sliders">
               <div class="slider">
                 <div class="slider-top"><label for="energy-range">Energie</label><output id="energy-val" for="energy-range">60 %</output></div>
+                <div id="energy-presets" class="presets" role="group" aria-label="Rychlá volba energie"></div>
                 <input id="energy-range" class="range range-energy" type="range" min="0" max="100" step="5" value="60">
                 <div class="slider-ends" aria-hidden="true"><span>vyčerpaný/á</span><span>plný/á sil</span></div>
               </div>
               <div class="slider">
                 <div class="slider-top"><label for="load-range">Vytížení dne</label><output id="load-val" for="load-range">40 %</output></div>
+                <div id="load-presets" class="presets" role="group" aria-label="Rychlá volba vytížení"></div>
                 <input id="load-range" class="range range-load" type="range" min="0" max="100" step="5" value="40" aria-describedby="load-help">
                 <div class="slider-ends" aria-hidden="true"><span>volno</span><span>plný rozvrh</span></div>
               </div>
@@ -174,7 +203,10 @@
               <p class="eyebrow">Všechny kategorie</p>
               <h1 id="h-backlog">Zásobník</h1>
             </div>
-            <span class="count count-lg" id="count-backlog">0</span>
+            <div class="head-actions">
+              <button id="pick-me" class="btn" type="button"><svg class="i"><use href="#i-shuffle"/></svg>Vyber za mě</button>
+              <span class="count count-lg" id="count-backlog">0</span>
+            </div>
           </div>
           <p class="muted hint">Klepnutím na lístek ho přesuneš do dnešních priorit. Jak moc se to dnes vyplatí, ti poradí stránka Dnes.</p>
           <div id="backlog-grid" class="cat-grid" data-zone="backlog"></div>
@@ -317,8 +349,9 @@
         <div class="st-actions">
           <button id="st-sync" class="btn" type="button">Synchronizovat teď</button>
           <button id="st-disconnect" class="btn btn-danger" type="button">Odpojit toto zařízení</button>
+          <button id="st-logout" class="btn btn-danger" type="button" hidden>Odhlásit se</button>
         </div>
-        <p class="fine-left">Odpojení smaže z tohoto zařízení token. Data v repozitáři i lokální kopie zůstávají.</p>
+        <p id="st-conn-note" class="fine-left">Odpojení smaže z tohoto zařízení token. Data v repozitáři i lokální kopie zůstávají.</p>
       </div>
 
       <div class="st-block st-backup">
@@ -332,6 +365,46 @@
     </form>
   </dialog>
 
+  <dialog id="focus-dialog" class="focus" aria-labelledby="focus-title">
+    <div class="focus-card">
+      <header class="focus-top">
+        <span class="focus-eyebrow" id="focus-kind">Soustředění</span>
+        <button id="focus-close" class="icon-btn" type="button" aria-label="Zavřít (časovač běží dál)"><svg class="i"><use href="#i-x"/></svg></button>
+      </header>
+      <h2 id="focus-title"></h2>
+      <p id="focus-cat" class="focus-cat"></p>
+      <div class="focus-clock" role="timer" aria-live="off">
+        <svg viewBox="0 0 220 220" aria-hidden="true">
+          <circle cx="110" cy="110" r="100" class="ring-bg"/>
+          <circle id="focus-ring" cx="110" cy="110" r="100" class="ring-fg" stroke-dasharray="628.32" stroke-dashoffset="0" transform="rotate(-90 110 110)"/>
+        </svg>
+        <span id="focus-time" class="focus-time">25:00</span>
+      </div>
+      <div id="focus-presets" class="presets presets-focus" role="group" aria-label="Délka bloku"></div>
+      <p id="focus-msg" class="focus-msg" role="status" aria-live="polite"></p>
+      <div class="focus-controls">
+        <button id="focus-toggle" class="btn btn-big" type="button"></button>
+        <button id="focus-more" class="btn btn-big" type="button" hidden>Ještě 10 minut</button>
+        <button id="focus-break" class="btn btn-big" type="button" hidden>Pauza 5 minut</button>
+      </div>
+      <ul id="focus-steps" class="steps focus-steps"></ul>
+      <button id="focus-done" class="btn btn-done" type="button"><svg class="i"><use href="#i-tick"/></svg>Hotovo</button>
+    </div>
+  </dialog>
+
+  <dialog id="prefs-dialog" aria-labelledby="prefs-title">
+    <div class="st-block" style="gap:18px">
+      <div class="dlg-head"><h2 id="prefs-title">Pohodlí a vzhled</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Zavřít"><svg class="i"><use href="#i-x"/></svg></button></div>
+      <p class="muted">Nastavení platí jen v tomto zařízení.</p>
+      <fieldset class="field"><legend>Velikost textu</legend>
+        <div id="pref-fs" class="seg-wrap" role="radiogroup"></div></fieldset>
+      <label class="switch"><input type="checkbox" id="pref-calm"><span class="sw"></span><span class="sw-t"><strong>Klidnější barvy</strong><small>Tlumí sytost lístků, když je jich moc na oči.</small></span></label>
+      <label class="switch"><input type="checkbox" id="pref-still"><span class="sw"></span><span class="sw-t"><strong>Bez animací</strong><small>Žádné konfety ani pohyb. Respektuje i nastavení systému.</small></span></label>
+      <label class="switch"><input type="checkbox" id="pref-sound"><span class="sw"></span><span class="sw-t"><strong>Zvuk na konci časovače</strong><small>Krátké pípnutí, když soustředění skončí.</small></span></label>
+    </div>
+  </dialog>
+
   <!-- Toast -->
   <div id="toast" class="toast" role="status" aria-live="polite">
     <span id="toast-msg"></span>
@@ -339,6 +412,8 @@
     <button id="toast-undo" type="button" hidden>Zpět</button>
   </div>
 
+  <script src="vault.js"></script>
+  <script src="users.js"></script>
   <script src="plan.js"></script>
   <script src="app.js"></script>
 </body>
