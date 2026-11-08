@@ -132,7 +132,27 @@
         .map((s) => ({ id: String(s.id || uuid()), text: String(s.text).slice(0, 200), done: Boolean(s.done) })),
       updated_at: t.updated_at || EPOCH,
     };
+    if (t.routine_id) { o.routine_id = String(t.routine_id); o.routine_item = String(t.routine_item || ""); }
     if (t.deleted) o.deleted = true;
+    return o;
+  }
+
+  function nRoutine(r) {
+    const o = {
+      id: String(r.id),
+      category_id: String(r.category_id || ""),
+      name: String(r.name || "Rutina").slice(0, 60),
+      items: (Array.isArray(r.items) ? r.items : [])
+        .filter((i) => i && String(i.text || "").trim())
+        .map((i) => ({ id: String(i.id || uuid()), text: String(i.text).slice(0, 200) })),
+      effort: EFFORTS.includes(r.effort) ? r.effort : "medium",
+      every_days: Math.max(0, Math.min(365, Math.round(Number(r.every_days) || 0))),
+      last_added: r.last_added ? String(r.last_added) : null,
+      snooze: r.snooze ? String(r.snooze) : null,
+      pos: Number(r.pos) || 0,
+      updated_at: r.updated_at || EPOCH,
+    };
+    if (r.deleted) o.deleted = true;
     return o;
   }
 
@@ -146,12 +166,14 @@
     const r = raw && typeof raw === "object" ? raw : {};
     const cats = (Array.isArray(r.categories) ? r.categories : []).filter((x) => x && x.id).map(nCat);
     const tasks = (Array.isArray(r.tasks) ? r.tasks : []).filter((x) => x && x.id).map(nTask);
-    return { categories: cats, tasks, day: nDay(r.day) };
+    const routines = (Array.isArray(r.routines) ? r.routines : []).filter((x) => x && x.id).map(nRoutine);
+    return { categories: cats, tasks, routines, day: nDay(r.day) };
   }
 
   const canon = (s) => stable({
     c: [...s.categories].sort((a, b) => (a.id < b.id ? -1 : 1)),
     t: [...s.tasks].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    r: [...(s.routines || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     d: s.day || null,
   });
 
@@ -174,23 +196,27 @@
   function merge(a, b) {
     const cats = mergeLists(a.categories, b.categories);
     const tasks = mergeLists(a.tasks, b.tasks);
+    const routines = mergeLists(a.routines || [], b.routines || []);
     const alive = new Set(cats.filter((c) => !c.deleted).map((c) => c.id));
     const now = nowIso();
+    for (const r of routines) {
+      if (!r.deleted && !alive.has(r.category_id)) { r.deleted = true; r.updated_at = now; }
+    }
     for (const t of tasks) {
       if (!t.deleted && !alive.has(t.category_id)) { t.deleted = true; t.updated_at = now; }  // osiřelé úkoly
     }
     const limit = Date.now() - TOMBSTONE_DAYS * 864e5;
     const fresh = (x) => !(x.deleted && (Date.parse(x.updated_at) || 0) < limit);
-    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), day: pickNewer(a.day, b.day) || null };
+    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), day: pickNewer(a.day, b.day) || null };
   }
 
   /** Změněným záznamům nastaví updated_at. */
   function touch(prev, next) {
     const now = nowIso();
     const strip = (o) => { const c = { ...o }; delete c.updated_at; return stable(c); };
-    for (const key of ["categories", "tasks"]) {
-      const pm = new Map(prev[key].map((x) => [x.id, strip(x)]));
-      for (const x of next[key]) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
+    for (const key of ["categories", "tasks", "routines"]) {
+      const pm = new Map((prev[key] || []).map((x) => [x.id, strip(x)]));
+      for (const x of next[key] || []) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
     }
     if (next.day && (!prev.day || strip(prev.day) !== strip(next.day))) next.day.updated_at = now;
   }
@@ -198,7 +224,7 @@
   /* =====================================================================
      Stav, uložení
      ===================================================================== */
-  let state = { categories: [], tasks: [], day: null };
+  let state = { categories: [], tasks: [], routines: [], day: null };
   let meta = { sha: null, dirty: false };
   let gh = null;                    // {repo, token, path, branch}
   let version = 0;                  // počítadlo lokálních změn
@@ -409,7 +435,7 @@
           if (snapVer === version) meta.dirty = false;
           settled = true;
         } else {
-          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, day: merged.day }, remote ? remote.sha : null);
+          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], day: merged.day }, remote ? remote.sha : null);
           if (res.conflict) continue;
           meta.sha = res.sha;
           if (snapVer === version) meta.dirty = false;
@@ -455,7 +481,7 @@
       const remote = await ghGetFile();
       if (remote && isPristine()) {
         // nové zařízení: neduplikovat výchozí kategorie, které už jinde existují
-        state = { categories: [], tasks: [], day: null };
+        state = { categories: [], tasks: [], routines: [], day: null };
       }
       store.set(K.gh, cfg);
       store.set(K.seeded, true);
@@ -589,7 +615,7 @@
   let ROUTE = { name: "dnes" };
 
   function parseRoute() {
-    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|kat)(?:\/([\w-]+))?$/);
+    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|kat)(?:\/([\w-]+))?$/);
     if (!m) return { name: "dnes" };
     if (m[1] === "kat") return catById(m[2]) ? { name: "kat", id: m[2] } : { name: "dnes", fix: true };
     return { name: m[1] };
@@ -624,8 +650,10 @@
     $("view-today").hidden = ROUTE.name !== "dnes";
     $("view-backlog").hidden = ROUTE.name !== "zasobnik";
     $("view-cat").hidden = ROUTE.name !== "kat";
+    $("view-routines").hidden = ROUTE.name !== "rutiny";
     if (ROUTE.name === "dnes") renderToday();
     else if (ROUTE.name === "zasobnik") renderBacklog();
+    else if (ROUTE.name === "rutiny") renderRoutines();
     else renderCat();
     renderComposerOptions();
     setTitle();
@@ -649,6 +677,7 @@
     }
     setBadge("nav-today-n", open); setBadge("nav-backlog-n", backlog);
     setBadge("tab-today-n", open); setBadge("tab-backlog-n", backlog);
+    setBadge("nav-routines-n", dueRoutines().length);
 
     const box = $("side-cats");
     box.replaceChildren(...cats.map((c) => {
@@ -810,6 +839,7 @@
     $("count-today").textContent = open.length;
     $("count-done").textContent = done.length;
 
+    renderRoutineDue();
     renderTodayList(open);
     fillList($("done-list"), done, "done", emptyEl("Zatím nic hotového", "Co dokončíš, se objeví tady."), {});
     renderEnergy(open, done);
@@ -1235,9 +1265,184 @@
     commit((s) => {
       s.categories.find((x) => x.id === id).deleted = true;
       s.tasks.forEach((t) => { if (t.category_id === id && !t.deleted) t.deleted = true; });
+      s.routines.forEach((r) => { if (r.category_id === id && !r.deleted) r.deleted = true; });
     }, n ? `Kategorie „${c.name}“ smazána i s ${n} ${plural(n, "úkolem", "úkoly", "úkoly")}.` : `Kategorie „${c.name}“ smazána.`);
     $("cat-dialog").close();
     if (ROUTE.name === "kat" && ROUTE.id === id) location.hash = "#/dnes";
+  });
+
+  /* ---------- Rutiny ---------- */
+  const parseDay = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parseDay(s); d.setDate(d.getDate() + n); return dayKey(d); };
+  const daysBetween = (from, to) => Math.round((parseDay(to) - parseDay(from)) / 864e5);
+  const liveRoutines = () => state.routines.filter((r) => !r.deleted && catById(r.category_id)).sort(byPos);
+  const EVERY = [[0, "Ručně, když budu chtít"], [1, "Každý den"], [7, "Každý týden"], [14, "Každé 2 týdny"], [30, "Každý měsíc"], [90, "Každé 3 měsíce"]];
+  const everyLabel = (n) => (EVERY.find((e) => e[0] === n) || [0, `Každých ${n} ${plural(n, "den", "dny", "dní")}`])[1];
+
+  function nextDue(r) {
+    if (!r.every_days || !r.items.length) return null;
+    return r.last_added ? addDays(r.last_added, r.every_days) : dayKey();
+  }
+  function isDue(r) {
+    const n = nextDue(r);
+    return Boolean(n) && n <= dayKey() && !(r.snooze && r.snooze > dayKey());
+  }
+  const dueRoutines = () => liveRoutines().filter(isDue);
+
+  function routineStatus(r) {
+    if (!r.items.length) return "Zatím bez úkolů";
+    if (isDue(r)) return r.last_added ? `Je na řadě (naposledy ${fmtDate(parseDay(r.last_added))})` : "Je na řadě, ještě nebyla přidána";
+    const n = nextDue(r);
+    if (n) {
+      const d = daysBetween(dayKey(), n);
+      if (d <= 0) return "Odloženo, připomenu to zítra";
+      return `Příště za ${d} ${plural(d, "den", "dny", "dní")}`;
+    }
+    return r.last_added ? `Naposledy přidáno ${fmtDate(parseDay(r.last_added))}` : "Ještě nepřidáno";
+  }
+
+  /** Přidá do kategorie lístky z rutiny. Co už je v úkolech nesplněné, nepřidá podruhé. */
+  function addRoutine(id) {
+    const r = state.routines.find((x) => x.id === id && !x.deleted);
+    if (!r) return;
+    const cat = catById(r.category_id);
+    if (!cat) { toast("Kategorie téhle rutiny už neexistuje."); return; }
+    const have = new Set(liveTasks().filter((t) => t.routine_id === id && t.status !== "done").map((t) => t.routine_item));
+    const todo = r.items.filter((i) => !have.has(i.id));
+    const skipped = r.items.length - todo.length;
+    const msg = todo.length
+      ? `Rutina „${r.name}“: přidáno ${todo.length} ${plural(todo.length, "úkol", "úkoly", "úkolů")} do kategorie ${cat.name}.${skipped ? ` ${skipped} už v úkolech máš.` : ""}`
+      : `Všechno z rutiny „${r.name}“ už v úkolech máš.`;
+    commit((s) => {
+      const t0 = Date.now();
+      todo.forEach((i, k) => s.tasks.push({
+        id: uuid(), category_id: r.category_id, text: i.text, status: "backlog", done_at: null, pos: t0 + k,
+        effort: r.effort, steps: [], routine_id: id, routine_item: i.id, updated_at: nowIso(),
+      }));
+      const rr = s.routines.find((x) => x.id === id);
+      rr.last_added = dayKey(); rr.snooze = null;
+    }, msg, { action: { label: "Zobrazit", fn: () => { location.hash = "#/kat/" + r.category_id; } }, ms: 9000 });
+  }
+
+  function snoozeRoutine(id) {
+    commit((s) => { s.routines.find((x) => x.id === id).snooze = addDays(dayKey(), 1); }, "Připomenu to zítra.");
+  }
+
+  function renderRoutineDue() {
+    const box = $("routine-due");
+    const due = dueRoutines();
+    box.hidden = !due.length;
+    if (!due.length) { box.replaceChildren(); return; }
+    const rows = due.slice(0, 2).map((r) => {
+      const c = catById(r.category_id);
+      return h("div", { class: `due-row c-${c.color}` },
+        h("span", { class: "due-ic", "aria-hidden": "true" }, icon("repeat")),
+        h("div", { class: "due-txt" },
+          h("b", null, `Rutina „${r.name}“ je na řadě`),
+          h("span", null, `${r.items.length} ${plural(r.items.length, "úkol", "úkoly", "úkolů")} do kategorie ${c.name}`)),
+        h("button", { type: "button", class: "btn btn-sm due-add", on: { click: () => addRoutine(r.id) } }, "Přidat do zásobníku"),
+        h("button", { type: "button", class: "btn btn-sm btn-ghost due-later", on: { click: () => snoozeRoutine(r.id) } }, "Zítra"));
+    });
+    if (due.length > 2) rows.push(h("a", { class: "due-more", href: "#/rutiny" }, `Další rutiny na řadě: ${due.length - 2}`));
+    box.replaceChildren(...rows);
+  }
+
+  const STARTER = {
+    name: "Úklid bytu", every: 7, effort: "medium", cat: "Domácnost",
+    items: ["Vysát podlahy", "Vytřít podlahy", "Utřít prach", "Vyčistit koupelnu a WC", "Vynést odpadky", "Vyměnit ložní prádlo", "Vyprat a pověsit prádlo"],
+  };
+
+  function routineCard(r) {
+    const c = catById(r.category_id);
+    const due = isDue(r);
+    const shown = r.items.slice(0, 4);
+    return h("article", { class: `routine c-${c.color}${due ? " is-due" : ""}`, "data-k": "routine:" + r.id },
+      h("header", { class: "routine-head" },
+        h("div", null,
+          h("h3", null, r.name),
+          h("p", { class: "routine-meta" }, `${c.name} · ${everyLabel(r.every_days)}`)),
+        iconBtn("edit", "Upravit rutinu", () => openRoutineDialog(r.id), "routine-edit:" + r.id)),
+      h("p", { class: "routine-status" }, due ? h("span", { class: "due-pill" }, "Na řadě") : null, routineStatus(r)),
+      r.items.length
+        ? h("ul", { class: "routine-items" }, ...shown.map((i) => h("li", null, i.text)),
+            r.items.length > shown.length ? h("li", { class: "more" }, `a dalších ${r.items.length - shown.length}`) : null)
+        : h("p", { class: "routine-empty" }, "Přidej do rutiny úkoly tlačítkem Upravit."),
+      h("button", { type: "button", class: "btn routine-add", disabled: !r.items.length, on: { click: () => addRoutine(r.id) } },
+        icon("plus"), "Přidat do úkolů"));
+  }
+
+  function renderRoutines() {
+    const list = liveRoutines();
+    $("routine-count").textContent = list.length;
+    const box = $("routine-list");
+    if (!list.length) {
+      box.replaceChildren(h("div", { class: "empty routine-welcome" },
+        h("strong", null, "Zatím tu nemáš žádnou rutinu"),
+        h("p", null, "Rutina je seznam úkolů, které se ti opakují, třeba úklid bytu nebo měsíční administrativa. Jedním klepnutím je všechny přidáš do zvolené kategorie."),
+        h("button", { type: "button", class: "btn btn-primary", on: { click: () => openRoutineDialog(null, STARTER) } }, "Vyzkoušet na úklidu bytu"),
+        h("button", { type: "button", class: "btn", on: { click: () => openRoutineDialog() } }, "Vytvořit vlastní")));
+      return;
+    }
+    box.replaceChildren(...list.map(routineCard));
+  }
+
+  let routineEditId = null;
+
+  function openRoutineDialog(id, preset) {
+    routineEditId = id || null;
+    const r = id ? state.routines.find((x) => x.id === id && !x.deleted) : null;
+    if (!liveCats().length) { toast("Nejdřív vytvoř kategorii."); openCatDialog(); return; }
+    const p = r || preset || {};
+    $("rt-title").textContent = r ? "Upravit rutinu" : "Nová rutina";
+    $("rt-name").value = r ? r.name : p.name || "";
+    const cats = liveCats();
+    const preCat = r ? r.category_id : (cats.find((c) => c.name === p.cat) || cats.find((c) => c.id === store.get(K.lastcat, "")) || cats[0]).id;
+    $("rt-cat").replaceChildren(...cats.map((c) => h("option", Object.assign({ value: c.id }, c.id === preCat ? { selected: true } : {}), c.name)));
+    const every = r ? r.every_days : p.every != null ? p.every : 0;
+    const opts = EVERY.some((e) => e[0] === every) ? EVERY : [...EVERY, [every, everyLabel(every)]];
+    $("rt-every").replaceChildren(...opts.map(([v, l]) => h("option", Object.assign({ value: v }, v === every ? { selected: true } : {}), l)));
+    buildSeg($("rt-effort"), "rt-effort", r ? r.effort : p.effort || "medium");
+    $("rt-items").value = r ? r.items.map((i) => i.text).join("\n") : (p.items || []).join("\n");
+    $("rt-error").textContent = "";
+    $("rt-delete").hidden = !r;
+    $("rt-addnow-wrap").hidden = Boolean(r);
+    $("rt-addnow").checked = !r;
+    closeSide();
+    $("routine-dialog").showModal();
+    (r ? $("rt-items") : $("rt-name")).focus();
+  }
+
+  $("routine-new").addEventListener("click", () => openRoutineDialog());
+
+  $("routine-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("rt-name").value.trim();
+    const lines = $("rt-items").value.split("\n").map((l) => l.trim().replace(/^([-•*]|\[ ?\])\s*/, "").trim()).filter(Boolean).slice(0, 40);
+    if (!name) { $("rt-error").textContent = "Napiš název rutiny."; $("rt-name").focus(); return; }
+    if (!lines.length) { $("rt-error").textContent = "Napiš aspoň jeden úkol, každý na nový řádek."; $("rt-items").focus(); return; }
+    const category_id = $("rt-cat").value, every_days = Number($("rt-every").value) || 0, effort = segValue($("rt-effort"));
+    const addNow = !routineEditId && $("rt-addnow").checked;
+    const id = routineEditId || uuid();
+    commit((s) => {
+      const old = routineEditId ? s.routines.find((x) => x.id === routineEditId) : null;
+      const pool = old ? [...old.items] : [];
+      const items = lines.map((text) => {
+        const k = pool.findIndex((i) => i.text === text);
+        return k >= 0 ? pool.splice(k, 1)[0] : { id: uuid(), text: text.slice(0, 200) };
+      });
+      if (old) Object.assign(old, { name, category_id, every_days, effort, items });
+      else s.routines.push({ id, name, category_id, every_days, effort, items, last_added: null, snooze: null, pos: Date.now(), updated_at: nowIso() });
+    });
+    $("routine-dialog").close();
+    if (addNow) addRoutine(id);
+    else toast(`Rutina „${name}“ uložena.`);
+  });
+
+  $("rt-delete").addEventListener("click", () => {
+    const id = routineEditId, r = state.routines.find((x) => x.id === id);
+    if (!r) return;
+    commit((s) => { s.routines.find((x) => x.id === id).deleted = true; }, `Rutina „${r.name}“ smazána. Úkoly, které už z ní vznikly, zůstaly.`);
+    $("routine-dialog").close();
   });
 
   /* ---------- Úložiště ---------- */
@@ -1403,7 +1608,7 @@
   }
 
   function pageTitle() {
-    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : "Dnes · Stickies";
+    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : ROUTE.name === "rutiny" ? "Rutiny · Stickies" : "Dnes · Stickies";
   }
   function setTitle() { document.title = focus.running ? `⏱ ${fmtClock(focus.left)} · Stickies` : pageTitle(); }
 
@@ -1575,7 +1780,7 @@
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
-      state = { categories: [], tasks: [], day: null };
+      state = { categories: [], tasks: [], routines: [], day: null };
       seedDefaults();
     }
     ROUTE = parseRoute();

@@ -44,6 +44,7 @@
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3.2"/></symbol>
     <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
     <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
@@ -82,6 +83,7 @@
       <nav class="side-nav" aria-label="Hlavní stránky">
         <a class="nav-item" href="#/dnes" data-route="dnes"><svg class="i"><use href="#i-today"/></svg><span>Dnes</span><b id="nav-today-n" class="nav-n" hidden></b></a>
         <a class="nav-item" href="#/zasobnik" data-route="zasobnik"><svg class="i"><use href="#i-list"/></svg><span>Zásobník</span><b id="nav-backlog-n" class="nav-n" hidden></b></a>
+        <a class="nav-item" href="#/rutiny" data-route="rutiny"><svg class="i"><use href="#i-repeat"/></svg><span>Rutiny</span><b id="nav-routines-n" class="nav-n" hidden></b></a>
       </nav>
 
       <div class="side-section">
@@ -149,6 +151,8 @@
             </div>
           </div>
 
+          <div id="routine-due" class="routine-due" hidden></div>
+
           <div class="today-grid">
           <!-- Stav dne -->
           <section class="panel energy" id="energy-panel" aria-labelledby="h-energy">
@@ -207,6 +211,22 @@
           </div>
           <p class="muted hint">Klepnutím na lístek ho přesuneš do dnešních priorit. Jak moc se to dnes vyplatí, ti poradí stránka Dnes.</p>
           <div id="backlog-grid" class="cat-grid" data-zone="backlog"></div>
+        </section>
+
+        <!-- ===== Rutiny ===== -->
+        <section id="view-routines" class="view" aria-labelledby="h-routines" hidden>
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Co se opakuje</p>
+              <h1 id="h-routines">Rutiny</h1>
+            </div>
+            <div class="head-actions">
+              <button id="routine-new" class="btn btn-primary" type="button"><svg class="i"><use href="#i-plus"/></svg>Nová rutina</button>
+              <span class="count count-lg" id="routine-count">0</span>
+            </div>
+          </div>
+          <p class="muted hint">Rutina je seznam úkolů, které si potřebuješ čas od času přidat do určité kategorie. Když je na řadě, nabídnu ti to na stránce Dnes. Nic se samo nepřidá.</p>
+          <div id="routine-list" class="routine-grid"></div>
         </section>
 
         <!-- ===== Kategorie ===== -->
@@ -296,6 +316,42 @@
       <p id="cat-error" class="form-error" role="alert"></p>
       <div class="dialog-actions">
         <button type="button" id="cat-delete" class="btn btn-danger" hidden>Smazat</button>
+        <span class="grow"></span>
+        <button type="button" class="btn" data-close>Zrušit</button>
+        <button type="submit" class="btn btn-primary">Uložit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="routine-dialog" aria-labelledby="rt-title">
+    <form id="routine-form">
+      <h2 id="rt-title">Nová rutina</h2>
+      <div class="field">
+        <label for="rt-name">Název</label>
+        <input id="rt-name" type="text" maxlength="60" autocomplete="off" placeholder="např. Úklid bytu">
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="rt-cat">Kategorie, do které se úkoly přidají</label>
+          <select id="rt-cat"></select>
+        </div>
+        <div class="field">
+          <label for="rt-every">Jak často mi to připomenout</label>
+          <select id="rt-every"></select>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lbl" id="rt-effort-lbl">Náročnost úkolů</span>
+        <div id="rt-effort" class="seg-wrap" role="group" aria-labelledby="rt-effort-lbl"></div>
+      </div>
+      <div class="field">
+        <label for="rt-items">Úkoly v rutině (každý na nový řádek)</label>
+        <textarea id="rt-items" rows="7" maxlength="6000" placeholder="Vysát podlahy&#10;Vytřít podlahy&#10;Utřít prach"></textarea>
+      </div>
+      <label id="rt-addnow-wrap" class="check"><input id="rt-addnow" type="checkbox" checked> Po uložení hned přidat úkoly do kategorie</label>
+      <p id="rt-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" id="rt-delete" class="btn btn-danger" hidden>Smazat</button>
         <span class="grow"></span>
         <button type="button" class="btn" data-close>Zrušit</button>
         <button type="submit" class="btn btn-primary">Uložit</button>

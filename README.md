@@ -57,12 +57,20 @@ Pak *Commit changes*. Za minutu je to na webu.
 ## 4. Jak se s tím pracuje
 - **Dnes**: dnešní priority (nahoře karta **Teď**), hotovo dnes a **Stav dne**.
 - **Zásobník**: všechny kategorie vedle sebe, **Vyber za mě**, v každé kategorii nejvýš 6 lístků a tlačítko pro zbytek.
+- **Rutiny**: opakující se seznamy úkolů (viz níže).
 - **Kategorie** v boční liště (na mobilu tlačítko *Kategorie*): vlastní stránka. Klávesa **N** otevře přidání úkolu.
 - **Lístky jsou barevné podle kategorie**, i ty hotové (tlumeněji, s barevným pruhem).
 - **Rozepsat / rozbalit**: každý úkol má tlačítko *Rozepsat*. Kroky se píšou rovnou na lístku (Enter = další krok), odškrtávají se a jdou sbalit. *Vložit šablonu kroků* dá čtyři startovní kroky. *Udělat z kroků samostatné úkoly* rozdělí úkol na nezávislé lehké úkoly (jde vrátit tlačítkem Zpět).
 
 ### Stav dne a doporučení
 Zadáš energii a vytížení dne (rychle přes předvolby nebo posuvníkem). Aplikace spočítá kapacitu v bodech (lehký 1, střední 2, náročný 4) a řekne, kolik úkolů a jakých dnes dává smysl, co se ještě vejde a kdy je plán přeplněný. V zásobníku označí lístky, které se k dnešku hodí. Je to pomůcka, ne diagnóza. Konstanty se dají upravit v `plan.js` (`CFG`).
+
+### Rutiny
+Stránka **Rutiny** v menu je pro seznamy úkolů, které se ti čas od času opakují (třeba úklid bytu).
+- **Nová rutina**: název, kategorie, jak často ti to má aplikace připomenout (ručně, týdně, po 2 týdnech, měsíčně…) a úkoly, každý na nový řádek. U prvního použití je tlačítko s hotovým příkladem *Úklid bytu*.
+- **Přidat do úkolů** vloží všechny úkoly rutiny jako lístky do zvolené kategorie (do zásobníku). Co už z rutiny máš nehotové, se nepřidá podruhé.
+- Když je rutina na řadě, nabídne ti to stránka **Dnes** (*Přidat do zásobníku* nebo *Zítra*). Nic se samo nepřidá, aby tě aplikace nezahltila.
+- Rutiny jsou součástí dat uživatele a synchronizují se stejně jako úkoly. Smazání rutiny nesmaže úkoly, které z ní už vznikly. Smazání kategorie smaže i její rutiny.
 
 ## 5. Co v aplikaci pomáhá s ADHD (a proč)
 | Potíž | Co aplikace dělá |
