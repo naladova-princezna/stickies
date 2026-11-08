@@ -810,3 +810,64 @@ html[data-still="1"] *, html[data-still="1"] *::before, html[data-still="1"] *::
 
 .check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; cursor: pointer; }
 .check input { width: 22px; height: 22px; accent-color: #7c6cff; }
+
+/* ===== v7: Přehled (statistiky a odhad) ===== */
+.stats-body { display: grid; gap: 16px; }
+.stat-panel .small, .small { font-size: 13px; }
+.stat-panel p { margin: 0 0 12px; }
+.conf { display: inline-block; margin: 0 0 14px !important; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 800; background: rgba(255, 255, 255, .08); }
+.conf-high { background: rgba(31, 224, 184, .18); color: #1fe0b8; }
+.conf-mid { background: rgba(124, 108, 255, .2); color: #c8c0ff; }
+.conf-low { background: rgba(255, 200, 97, .16); color: #ffc861; }
+
+.fc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.fc-card { display: grid; gap: 8px; align-content: start; padding: 12px; border-radius: 16px; background: rgba(255, 255, 255, .05); border: 1px solid var(--line-2); }
+.fc-card.is-today { border-color: rgba(124, 108, 255, .7); background: rgba(124, 108, 255, .12); }
+.fc-card > b { font-size: 15px; }
+.fc-date { font-size: 12px; color: var(--muted); margin-top: -6px; font-weight: 600; }
+.fc-m { display: grid; gap: 4px; }
+.fc-row { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; }
+.fc-row span { color: var(--muted); font-weight: 600; }
+.fc-bar { position: relative; height: 8px; border-radius: 8px; background: rgba(255, 255, 255, .1); }
+.fc-range { position: absolute; top: 0; bottom: 0; border-radius: 8px; opacity: .35; }
+.fc-e .fc-range, .fc-e .fc-bar i { background: #1fe0b8; }
+.fc-l .fc-range, .fc-l .fc-bar i { background: #a99bff; }
+.fc-bar i { position: absolute; top: -2px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; border: 2px solid #0b0a22; }
+.fc-m small { font-size: 11px; color: var(--faint); }
+
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.ch-grid { stroke: rgba(255, 255, 255, .12); stroke-width: 1; }
+.ch-t { fill: var(--muted); font-size: 11px; font-weight: 600; }
+.ch-today { fill: var(--text); font-weight: 800; }
+.ch-fc { fill: rgba(255, 255, 255, .045); }
+.ch-now { stroke: rgba(255, 255, 255, .5); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 8px; font-size: 14px; font-weight: 700; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.lg { display: inline-block; width: 12px; height: 12px; }
+.lg-e { background: #1fe0b8; border-radius: 50%; }
+.lg-l { background: #a99bff; border-radius: 2px; }
+
+.wk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; }
+.wk-col { display: grid; gap: 4px; justify-items: center; text-align: center; }
+.wk-col small { color: var(--muted); font-size: 12px; }
+.wk-bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; width: 100%; justify-content: center; }
+.wk-bars i { width: 38%; max-width: 22px; border-radius: 6px 6px 2px 2px; min-height: 3px; }
+.wk-e { background: #1fe0b8; } .wk-l { background: #a99bff; }
+
+.cycle-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.bands { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.band { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid var(--line-2); }
+.band small { color: var(--muted); }
+.hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hist li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 4px; border-bottom: 1px solid var(--line-2); font-size: 14px; }
+.hist-d { font-weight: 800; min-width: 74px; }
+.hist .btn { margin-left: auto; }
+.chip-routine { display: inline-flex; align-items: center; padding: 0 8px; }
+.chip-routine .i { width: 14px; height: 14px; }
+#day-dialog label b { float: right; }
+
+@media (max-width: 860px) {
+  .fc-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .wk-bars { height: 96px; }
+}
+@media (max-width: 860px) { .ch-t { font-size: 20px; } .chart circle[r="3.6"] { r: 6px; } }

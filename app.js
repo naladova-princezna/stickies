@@ -156,10 +156,14 @@
     return o;
   }
 
-  function nDay(d) {
-    if (!d || !d.date) return null;
-    const c = (v, def) => (Number.isFinite(+v) ? Math.max(0, Math.min(100, +v)) : def);
-    return { date: String(d.date), energy: c(d.energy, 60), load: c(d.load, 40), set: Boolean(d.set), updated_at: d.updated_at || EPOCH };
+  /** Záznam jednoho dne: id je samo datum, takže z každého dne existuje nejvýš jeden záznam. */
+  function nDayRec(d) {
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || ""))) return null;
+    const c = (v, def) => (Number.isFinite(+v) ? Math.max(0, Math.min(100, Math.round(+v))) : def);
+    const o = { id: String(d.date), date: String(d.date), energy: c(d.energy, 60), load: c(d.load, 40), set: d.set !== false, updated_at: d.updated_at || EPOCH };
+    if (d.cycle_start) o.cycle_start = true;
+    if (d.deleted) o.deleted = true;
+    return o;
   }
 
   function normalize(raw) {
@@ -167,14 +171,18 @@
     const cats = (Array.isArray(r.categories) ? r.categories : []).filter((x) => x && x.id).map(nCat);
     const tasks = (Array.isArray(r.tasks) ? r.tasks : []).filter((x) => x && x.id).map(nTask);
     const routines = (Array.isArray(r.routines) ? r.routines : []).filter((x) => x && x.id).map(nRoutine);
-    return { categories: cats, tasks, routines, day: nDay(r.day) };
+    const map = new Map();
+    for (const x of (Array.isArray(r.days) ? r.days : []).map(nDayRec).filter(Boolean)) map.set(x.id, x);
+    const legacy = nDayRec(r.day);                       // starší verze ukládaly jen dnešek
+    if (legacy && legacy.set && !map.has(legacy.id)) map.set(legacy.id, legacy);
+    return { categories: cats, tasks, routines, days: [...map.values()] };
   }
 
   const canon = (s) => stable({
     c: [...s.categories].sort((a, b) => (a.id < b.id ? -1 : 1)),
     t: [...s.tasks].sort((a, b) => (a.id < b.id ? -1 : 1)),
     r: [...(s.routines || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
-    d: s.day || null,
+    d: [...(s.days || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
   });
 
   function pickNewer(x, y) {
@@ -197,6 +205,7 @@
     const cats = mergeLists(a.categories, b.categories);
     const tasks = mergeLists(a.tasks, b.tasks);
     const routines = mergeLists(a.routines || [], b.routines || []);
+    const days = mergeLists(a.days || [], b.days || []);
     const alive = new Set(cats.filter((c) => !c.deleted).map((c) => c.id));
     const now = nowIso();
     for (const r of routines) {
@@ -207,24 +216,23 @@
     }
     const limit = Date.now() - TOMBSTONE_DAYS * 864e5;
     const fresh = (x) => !(x.deleted && (Date.parse(x.updated_at) || 0) < limit);
-    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), day: pickNewer(a.day, b.day) || null };
+    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh) };
   }
 
   /** Změněným záznamům nastaví updated_at. */
   function touch(prev, next) {
     const now = nowIso();
     const strip = (o) => { const c = { ...o }; delete c.updated_at; return stable(c); };
-    for (const key of ["categories", "tasks", "routines"]) {
+    for (const key of ["categories", "tasks", "routines", "days"]) {
       const pm = new Map((prev[key] || []).map((x) => [x.id, strip(x)]));
       for (const x of next[key] || []) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
     }
-    if (next.day && (!prev.day || strip(prev.day) !== strip(next.day))) next.day.updated_at = now;
   }
 
   /* =====================================================================
      Stav, uložení
      ===================================================================== */
-  let state = { categories: [], tasks: [], routines: [], day: null };
+  let state = { categories: [], tasks: [], routines: [], days: [] };
   let meta = { sha: null, dirty: false };
   let gh = null;                    // {repo, token, path, branch}
   let version = 0;                  // počítadlo lokálních změn
@@ -435,7 +443,7 @@
           if (snapVer === version) meta.dirty = false;
           settled = true;
         } else {
-          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], day: merged.day }, remote ? remote.sha : null);
+          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [] }, remote ? remote.sha : null);
           if (res.conflict) continue;
           meta.sha = res.sha;
           if (snapVer === version) meta.dirty = false;
@@ -481,7 +489,7 @@
       const remote = await ghGetFile();
       if (remote && isPristine()) {
         // nové zařízení: neduplikovat výchozí kategorie, které už jinde existují
-        state = { categories: [], tasks: [], routines: [], day: null };
+        state = { categories: [], tasks: [], routines: [], days: [] };
       }
       store.set(K.gh, cfg);
       store.set(K.seeded, true);
@@ -615,7 +623,7 @@
   let ROUTE = { name: "dnes" };
 
   function parseRoute() {
-    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|kat)(?:\/([\w-]+))?$/);
+    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|prehled|kat)(?:\/([\w-]+))?$/);
     if (!m) return { name: "dnes" };
     if (m[1] === "kat") return catById(m[2]) ? { name: "kat", id: m[2] } : { name: "dnes", fix: true };
     return { name: m[1] };
@@ -651,9 +659,11 @@
     $("view-backlog").hidden = ROUTE.name !== "zasobnik";
     $("view-cat").hidden = ROUTE.name !== "kat";
     $("view-routines").hidden = ROUTE.name !== "rutiny";
+    $("view-stats").hidden = ROUTE.name !== "prehled";
     if (ROUTE.name === "dnes") renderToday();
     else if (ROUTE.name === "zasobnik") renderBacklog();
     else if (ROUTE.name === "rutiny") renderRoutines();
+    else if (ROUTE.name === "prehled") renderStats();
     else renderCat();
     renderComposerOptions();
     setTitle();
@@ -758,6 +768,7 @@
 
     const foot = h("div", { class: "note-foot" });
     if (!o.hideCat) foot.append(h("span", { class: "chip" }, c.name));
+    if (t.routine_id) foot.append(h("span", { class: "chip chip-routine", title: "Úkol z rutiny" }, icon("repeat"), h("span", { class: "sr-only" }, "Z rutiny")));
     foot.append(h("span", { class: `eff eff-${t.effort}`, title: EFFORT_LABEL[t.effort] + " úkol" },
       h("i"), h("i"), h("i"), h("span", { class: "sr-only" }, EFFORT_LABEL[t.effort])));
     if (!done && (t.steps.length || !flag || open)) {
@@ -845,9 +856,37 @@
     renderEnergy(open, done);
   }
 
+  const liveDays = () => (state.days || []).filter((d) => !d.deleted);
+  const dayRec = (date) => liveDays().find((d) => d.date === date) || null;
+  const round5 = (v) => Math.round(v / 5) * 5;
+
+  /** Statistika se počítá jen když se data změnila (cache podle počítadla změn). */
+  let statsCache = { key: "", val: null };
+  function stats() {
+    const key = `${version}|${dayKey()}`;
+    if (statsCache.key === key) return statsCache.val;
+    const rows = liveDays().filter((d) => d.set).map((d) => ({ date: d.date, energy: d.energy, load: d.load }));
+    const points = {}, tasks = {};
+    for (const t of liveTasks()) {
+      if (t.status !== "done" || !t.done_at) continue;
+      const k = dayKey(new Date(t.done_at));
+      points[k] = (points[k] || 0) + (Plan.CFG.cost[t.effort] || 2);
+      tasks[k] = (tasks[k] || 0) + 1;
+    }
+    const anchors = liveDays().filter((d) => d.cycle_start).map((d) => d.date);
+    const val = Stats.analyze(rows, { today: dayKey(), points, tasks, anchors });
+    statsCache = { key, val };
+    return val;
+  }
+
   function dayValues() {
-    const d = state.day;
-    if (d && d.date === dayKey()) return { energy: d.energy, load: d.load, set: d.set };
+    const d = dayRec(dayKey());
+    if (d && d.set) return { energy: d.energy, load: d.load, set: true };
+    const st = stats();
+    if (st.forecast.length) {                      // ještě nezadáno: předvyplním odhad podle dosavadních dní
+      const f = st.forecast[0];
+      return { energy: round5(f.energy.v), load: round5(f.load.v), set: false, predicted: true };
+    }
     return { energy: 60, load: 40, set: false };
   }
 
@@ -885,7 +924,7 @@
     const er = $("energy-range"), lr = $("load-range");
     if (document.activeElement !== er) er.value = v.energy;
     if (document.activeElement !== lr) lr.value = v.load;
-    $("energy-unset").hidden = v.set;
+    $("energy-unset").textContent = v.set ? "uloženo do přehledu" : v.predicted ? "odhad podle tvých dat" : "výchozí odhad";
     paintEnergy(+er.value, +lr.value, open, done);
   }
 
@@ -954,7 +993,7 @@
 
     const brief = $("energy-brief");
     const isSet = dayValues().set;
-    brief.replaceChildren(!isSet ? "Zadej energii a vytížení a dostaneš doporučení na dnešek." : rec.total
+    brief.replaceChildren(!isSet ? (dayValues().predicted ? `Podle tvých záznamů odhaduji energii kolem ${rec.energy} % a vytížení ${rec.load} %. Potvrď to nebo uprav.` : "Zadej energii a vytížení a dostaneš doporučení na dnešek.") : rec.total
       ? `Energie ${rec.energy} %, vytížení ${rec.load} %. Doporučuji: ${chips.map(([, t]) => t).join(", ")}.`
       : `Energie ${rec.energy} %, vytížení ${rec.load} %. Dnes bez úkolů, odpočívej.`);
     const isOpen = energyIsOpen();
@@ -1445,6 +1484,211 @@
     $("routine-dialog").close();
   });
 
+  /* ---------- Přehled: historie, statistiky, odhad ---------- */
+  const svgEl = (tag, attrs, ...kids) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) e.setAttribute(k, v);
+    e.append(...kids.flat().filter((x) => x != null));
+    return e;
+  };
+  const fmtDM = (s) => { const d = parseDay(s); return `${d.getDate()}. ${d.getMonth() + 1}.`; };
+  const C_ENERGY = "#1fe0b8", C_LOAD = "#a99bff";
+  const CONF = { none: "Zatím málo dat", low: "Orientačně, zatím málo dní", mid: "Předběžný odhad", high: "Odhad s nalezeným cyklem" };
+
+  function lineChart(st) {
+    const W = 680, H = 230, pl = 34, pr = 12, pt = 14, pb = 28, span = 36;
+    const todayN = Stats.dn(dayKey()), n0 = todayN - 29;
+    const x = (n) => pl + ((n - n0) / (span - 1)) * (W - pl - pr);
+    const y = (v) => pt + (1 - v / 100) * (H - pt - pb);
+    const recent = st.rows.filter((r) => Stats.dn(r.date) >= n0);
+    const avg = (k) => (recent.length ? Math.round(recent.reduce((s, r) => s + r[k], 0) / recent.length) : 0);
+    const svg = svgEl("svg", {
+      viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img",
+      "aria-label": `Graf energie a vytížení za posledních 30 dní a odhad na 7 dní. Zadáno ${recent.length} dní, průměrná energie ${avg("energy")} %, průměrné vytížení ${avg("load")} %.`,
+    });
+    for (const g of [0, 50, 100]) {
+      svg.append(svgEl("line", { x1: pl, x2: W - pr, y1: y(g), y2: y(g), class: "ch-grid" }), svgEl("text", { x: pl - 6, y: y(g) + 4, class: "ch-t", "text-anchor": "end" }, String(g)));
+    }
+    svg.append(svgEl("rect", { x: x(todayN), y: pt, width: x(todayN + 6) - x(todayN) + 8, height: H - pt - pb, class: "ch-fc" }),
+      svgEl("text", { x: x(todayN) + 6, y: pt + 12, class: "ch-t" }, "odhad"));
+    for (let k = 0; k < span; k += 7) if (Math.abs(n0 + k - todayN) > 3) svg.append(svgEl("text", { x: x(n0 + k), y: H - 8, class: "ch-t", "text-anchor": "middle" }, fmtDM(Stats.ds(n0 + k))));
+    svg.append(svgEl("text", { x: x(todayN), y: H - 8, class: "ch-t ch-today", "text-anchor": "middle" }, "dnes"));
+    const byN = new Map(recent.map((r) => [Stats.dn(r.date), r]));
+    for (const [key, color, shape] of [["load", C_LOAD, "sq"], ["energy", C_ENERGY, "ci"]]) {
+      let seg = [];
+      const flush = () => { if (seg.length > 1) svg.append(svgEl("polyline", { points: seg.map((p) => p.join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2.5, "stroke-linejoin": "round" })); seg = []; };
+      for (let n = n0; n <= todayN; n++) {
+        const r = byN.get(n);
+        if (!r) { flush(); continue; }
+        seg.push([x(n).toFixed(1), y(r[key]).toFixed(1)]);
+      }
+      flush();
+      for (const [n, r] of byN) {
+        svg.append(shape === "ci" ? svgEl("circle", { cx: x(n), cy: y(r[key]), r: 3.6, fill: color })
+          : svgEl("rect", { x: x(n) - 3.3, y: y(r[key]) - 3.3, width: 6.6, height: 6.6, fill: color }));
+      }
+      if (st.forecast.length) {
+        svg.append(svgEl("polyline", { points: st.forecast.map((f, i) => `${x(todayN + i).toFixed(1)},${y(f[key].v).toFixed(1)}`).join(" "), fill: "none", stroke: color, "stroke-width": 2.5, "stroke-dasharray": "2 6", "stroke-linecap": "round" }));
+      }
+    }
+    return svg;
+  }
+
+  function cycleChart(cy) {
+    const W = 680, H = 150, pl = 12, pr = 12, pt = 14, pb = 24, L = cy.curve.length;
+    const m = Math.max(10, ...cy.curve.map(Math.abs));
+    const x = (i) => pl + (i / (L - 1)) * (W - pl - pr), y = (v) => pt + (1 - (v + m) / (2 * m)) * (H - pt - pb);
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": `Křivka tvého cyklu o délce ${L} dní. Dnes je ${cy.day}. den, energie je zde ${cy.level === "high" ? "nadprůměrná" : cy.level === "low" ? "podprůměrná" : "průměrná"}.` });
+    svg.append(svgEl("line", { x1: pl, x2: W - pr, y1: y(0), y2: y(0), class: "ch-grid" }),
+      svgEl("polyline", { points: cy.curve.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" "), fill: "none", stroke: C_ENERGY, "stroke-width": 3, "stroke-linejoin": "round" }),
+      svgEl("line", { x1: x(cy.phaseNow), x2: x(cy.phaseNow), y1: pt, y2: H - pb, class: "ch-now" }),
+      svgEl("circle", { cx: x(cy.phaseNow), cy: y(cy.curve[cy.phaseNow]), r: 5, fill: "#fff", stroke: C_ENERGY, "stroke-width": 3 }),
+      svgEl("text", { x: Math.min(W - 30, Math.max(30, x(cy.phaseNow))), y: H - 6, class: "ch-t ch-today", "text-anchor": "middle" }, "dnes"),
+      svgEl("text", { x: pl, y: H - 6, class: "ch-t" }, "začátek"), svgEl("text", { x: W - pr, y: H - 6, class: "ch-t", "text-anchor": "end" }, `${L}. den`));
+    return svg;
+  }
+
+  function statPanel(title, ...kids) {
+    return h("section", { class: "panel stat-panel" }, h("header", { class: "panel-head" }, h("h2", null, title)), ...kids);
+  }
+
+  function renderStats() {
+    const st = stats(), box = $("stats-body"), parts = [];
+    const todayStr = dayKey();
+
+    if (st.n < Stats.CFG.minRows) {
+      parts.push(statPanel("Zatím sbírám data",
+        h("p", { class: "muted" }, `Zadáno ${st.n} ze ${Stats.CFG.minRows} dní. Energii a vytížení zadáváš na stránce Dnes ve Stavu dne. Každý den se uloží sám. Po ${Stats.CFG.minRows} dnech ukážu první odhad, po 14 dnech týdenní rytmus a po několika týdnech případně i tvůj vlastní cyklus.`),
+        h("div", { class: "meter" }, h("div", { class: "meter-bar", role: "img", "aria-label": `${st.n} ze ${Stats.CFG.minRows} dní` }, h("span", { style: `width:${Math.min(100, (st.n / Stats.CFG.minRows) * 100)}%` })), h("span", { class: "meter-txt" }, `${st.n} / ${Stats.CFG.minRows}`)),
+        h("a", { class: "btn btn-primary", href: "#/dnes" }, "Zadat dnešek"),
+        h("span", { class: "muted small" }, " Zapomněla jsi na některé dny? Použij Doplnit den nahoře.")));
+    } else {
+      // odhad
+      const cards = st.forecast.map((f, i) => h("div", { class: "fc-card" + (i === 0 ? " is-today" : "") },
+        h("b", null, i === 0 ? "Dnes" : f.label), h("span", { class: "fc-date" }, fmtDM(f.date)),
+        ...[["Energie", f.energy, "e"], ["Vytížení", f.load, "l"]].map(([lbl, p, k]) => h("div", { class: "fc-m fc-" + k },
+          h("div", { class: "fc-row" }, h("span", null, lbl), h("b", null, p.v + " %")),
+          h("div", { class: "fc-bar", "aria-hidden": "true" }, h("span", { class: "fc-range", style: `left:${p.lo}%;width:${Math.max(2, p.hi - p.lo)}%` }), h("i", { style: `left:${p.v}%` })),
+          h("small", null, `${p.lo}–${p.hi} %`)))));
+      parts.push(statPanel("Odhad na dnes a dalších 6 dní",
+        h("p", { class: "conf conf-" + st.confidence }, CONF[st.confidence]),
+        h("div", { class: "fc-grid" }, cards),
+        h("p", { class: "muted small" }, "Z tvých zadaných dnů. Světlý pruh je pravděpodobné rozmezí. Ve Stavu dne je podle odhadu předvyplněno, ale rozhoduješ vždy ty.")));
+    }
+
+    // graf
+    if (st.n) {
+      parts.push(statPanel("Posledních 30 dní",
+        h("div", { class: "legend" }, h("span", null, h("i", { class: "lg lg-e" }), "Energie"), h("span", null, h("i", { class: "lg lg-l" }), "Vytížení"), st.forecast.length ? h("span", { class: "muted" }, "tečkovaně: odhad") : null),
+        lineChart(st)));
+    }
+
+    // týdenní rytmus
+    if (st.n >= Stats.CFG.weekdayRows) {
+      parts.push(statPanel("Týdenní rytmus",
+        h("p", { class: "muted small" }, "Průměr podle dne v týdnu."),
+        h("div", { class: "wk" }, st.weekday.map((w) => h("div", { class: "wk-col" },
+          h("div", { class: "wk-bars", role: "img", "aria-label": `${w.label}: energie ${w.energy ?? "?"} %, vytížení ${w.load ?? "?"} %, zadáno ${w.count} dní` },
+            h("i", { class: "wk-e", style: `height:${w.energy ?? 0}%` }), h("i", { class: "wk-l", style: `height:${w.load ?? 0}%` })),
+          h("b", null, w.label), h("small", null, w.energy == null ? "–" : w.energy + " %"))))));
+    }
+
+    // cyklus
+    const cyBody = [];
+    const marks = liveDays().filter((d) => d.cycle_start).map((d) => d.date).sort();
+    if (st.cycle) {
+      const cy = st.cycle, lvl = { high: "vyšší než obvykle", mid: "průměrná", low: "nižší než obvykle" }[cy.level];
+      cyBody.push(h("p", null, cy.kind === "anchors"
+        ? `Podle tebou označených začátků trvá tvůj cyklus zhruba ${cy.length} dní. Dnes je ${cy.day}. den a energie bývá v téhle části ${lvl}.`
+        : `V tvých datech se energie opakuje zhruba po ${cy.length} dnech. Dnes jsi asi v části, kde je energie ${lvl}.`),
+        h("p", { class: "muted" }, `Čekám to takhle: vyšší energie kolem ${fmtDM(cy.nextHigh)}, nižší kolem ${fmtDM(cy.nextLow)} (rozdíl mezi nejlepší a nejhorší částí je zhruba ${cy.amplitude} procentních bodů).`),
+        cycleChart(cy));
+    } else if (st.n < Stats.CFG.lagMinRows && marks.length < 2) {
+      cyBody.push(h("p", { class: "muted" }, `Cyklus se dá hledat zhruba od ${Stats.CFG.lagMinRows} zadaných dní (asi 6 týdnů). Zatím máš ${st.n}. Nic nepřehaduji, dokud na to nemám dost dat.`));
+    } else {
+      cyBody.push(h("p", { class: "muted" }, "V datech zatím nevidím zřetelné opakování. To je v pořádku: buď žádný pravidelný cyklus není, nebo je potřeba víc dní. Odhad se opírá jen o týdenní rytmus a poslední dny."));
+    }
+    cyBody.push(h("div", { class: "cycle-tools" },
+      h("button", { type: "button", class: "btn btn-sm", id: "cycle-mark", on: { click: toggleCycleToday } }, dayRec(todayStr) && dayRec(todayStr).cycle_start ? "Zrušit označení dneška" : "Dnes začíná nový cyklus"),
+      h("span", { class: "muted small" }, marks.length ? `Označené začátky: ${marks.slice(-4).map(fmtDM).join(", ")}${marks.length > 4 ? "…" : ""}` : "Volitelné: když sleduješ nějaký svůj pravidelný cyklus, označ jeho začátek (stačí 2×) a odhad bude přesnější.")));
+    cyBody.push(h("p", { class: "muted small" }, "Je to statistický odhad z tvých vlastních záznamů, ne měření a ne zdravotní pomůcka. Když ti nesedí, klidně ho ignoruj."));
+    parts.push(statPanel("Tvůj cyklus (experimentální)", ...cyBody));
+
+    // výkon podle energie
+    parts.push(statPanel("Kolik zvládneš při jaké energii",
+      st.bands.length
+        ? h("div", { class: "bands" }, st.bands.map((b) => h("div", { class: "band" },
+            h("b", null, b.label), h("span", null, `${b.avgTasks} ${plural(Math.round(b.avgTasks), "úkol", "úkoly", "úkolů")} denně, ${b.avgPoints} b`), h("small", null, `z ${b.days} dní`))))
+        : h("p", { class: "muted" }, "Zatím nemám dost údajů. Potřebuji splněné úkoly (odškrtávej je v aplikaci) a aspoň 3 dny v každém pásmu energie."),
+      h("p", { class: "muted small" }, "Body: lehký úkol 1, střední 2, náročný 4. Počítají se úkoly odškrtnuté v daný den. Pomůže to doladit, kolik si na dnešek plánovat.")));
+
+    // historie
+    const hist = liveDays().filter((d) => d.set).sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 14);
+    if (hist.length) {
+      parts.push(statPanel("Poslední záznamy",
+        h("ul", { class: "hist" }, hist.map((d) => h("li", null,
+          h("span", { class: "hist-d" }, `${Stats.WD[Stats.wdOf(Stats.dn(d.date))]} ${fmtDM(d.date)}`),
+          h("span", null, `energie ${d.energy} %, vytížení ${d.load} %`), d.cycle_start ? h("span", { class: "chip" }, "začátek cyklu") : null,
+          h("button", { type: "button", class: "btn btn-sm btn-ghost", on: { click: () => openDayDialog(d.date) } }, "Upravit"))))));
+    }
+    box.replaceChildren(...parts);
+  }
+
+  function toggleCycleToday() {
+    const k = dayKey();
+    commit((s) => {
+      const cur = s.days.find((d) => d.date === k);
+      if (cur) { if (cur.cycle_start) delete cur.cycle_start; else cur.cycle_start = true; delete cur.deleted; }
+      else { const v = dayValues(); s.days.push({ id: k, date: k, energy: v.energy, load: v.load, set: false, cycle_start: true, updated_at: nowIso() }); }
+    }, "Označeno. Odhad se přepočítá.");
+  }
+
+  let dayEditDate = null;
+  function fillDayDialog(date) {
+    dayEditDate = date;
+    const r = dayRec(date);
+    $("day-energy").value = r ? r.energy : 55;
+    $("day-load").value = r ? r.load : 40;
+    $("day-cycle").checked = Boolean(r && r.cycle_start);
+    $("day-delete").hidden = !r;
+    $("day-error").textContent = "";
+    paintDaySliders();
+  }
+  function paintDaySliders() {
+    for (const [id, out] of [["day-energy", "day-energy-v"], ["day-load", "day-load-v"]]) {
+      $(out).textContent = $(id).value + " %"; er_style($(id), +$(id).value);
+    }
+  }
+  function openDayDialog(date) {
+    $("day-date").max = dayKey();
+    $("day-date").value = date || dayKey();
+    fillDayDialog($("day-date").value);
+    closeSide();
+    $("day-dialog").showModal();
+    $("day-energy").focus();
+  }
+  $("day-add").addEventListener("click", () => openDayDialog());
+  $("day-date").addEventListener("change", () => { if ($("day-date").value) fillDayDialog($("day-date").value); });
+  $("day-energy").addEventListener("input", paintDaySliders);
+  $("day-load").addEventListener("input", paintDaySliders);
+  $("day-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const date = $("day-date").value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > dayKey()) { $("day-error").textContent = "Vyber den, který už nastal."; return; }
+    const energy = +$("day-energy").value, load = +$("day-load").value, cyc = $("day-cycle").checked;
+    commit((s) => {
+      const cur = s.days.find((d) => d.date === date);
+      if (cur) { cur.energy = energy; cur.load = load; cur.set = true; delete cur.deleted; if (cyc) cur.cycle_start = true; else delete cur.cycle_start; }
+      else s.days.push(Object.assign({ id: date, date, energy, load, set: true, updated_at: nowIso() }, cyc ? { cycle_start: true } : {}));
+    }, `Uloženo: ${fmtDM(date)}.`);
+    $("day-dialog").close();
+  });
+  $("day-delete").addEventListener("click", () => {
+    const date = dayEditDate;
+    commit((s) => { const cur = s.days.find((d) => d.date === date); if (cur) cur.deleted = true; }, `Záznam ${fmtDM(date)} smazán.`);
+    $("day-dialog").close();
+  });
+
   /* ---------- Úložiště ---------- */
   function renderStoreStatus() {
     const box = $("st-status");
@@ -1549,7 +1793,11 @@
     el.addEventListener("input", () => paintEnergy(+$("energy-range").value, +$("load-range").value));
     el.addEventListener("change", () => {
       const energy = +$("energy-range").value, load = +$("load-range").value;
-      commit((s) => { s.day = { date: dayKey(), energy, load, set: true, updated_at: nowIso() }; });
+      commit((s) => {
+        const k = dayKey(), cur = s.days.find((d) => d.date === k);
+        if (cur) { cur.energy = energy; cur.load = load; cur.set = true; delete cur.deleted; }
+        else s.days.push({ id: k, date: k, energy, load, set: true, updated_at: nowIso() });
+      });
     });
   }
 
@@ -1608,7 +1856,7 @@
   }
 
   function pageTitle() {
-    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : ROUTE.name === "rutiny" ? "Rutiny · Stickies" : "Dnes · Stickies";
+    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : ROUTE.name === "rutiny" ? "Rutiny · Stickies" : ROUTE.name === "prehled" ? "Přehled · Stickies" : "Dnes · Stickies";
   }
   function setTitle() { document.title = focus.running ? `⏱ ${fmtClock(focus.left)} · Stickies` : pageTitle(); }
 
@@ -1780,7 +2028,7 @@
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
-      state = { categories: [], tasks: [], routines: [], day: null };
+      state = { categories: [], tasks: [], routines: [], days: [] };
       seedDefaults();
     }
     ROUTE = parseRoute();

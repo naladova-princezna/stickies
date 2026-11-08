@@ -58,6 +58,7 @@ Pak *Commit changes*. Za minutu je to na webu.
 - **Dnes**: dnešní priority (nahoře karta **Teď**), hotovo dnes a **Stav dne**.
 - **Zásobník**: všechny kategorie vedle sebe, **Vyber za mě**, v každé kategorii nejvýš 6 lístků a tlačítko pro zbytek.
 - **Rutiny**: opakující se seznamy úkolů (viz níže).
+- **Přehled**: historie energie a vytížení, statistiky a odhad (viz níže).
 - **Kategorie** v boční liště (na mobilu tlačítko *Kategorie*): vlastní stránka. Klávesa **N** otevře přidání úkolu.
 - **Lístky jsou barevné podle kategorie**, i ty hotové (tlumeněji, s barevným pruhem).
 - **Rozepsat / rozbalit**: každý úkol má tlačítko *Rozepsat*. Kroky se píšou rovnou na lístku (Enter = další krok), odškrtávají se a jdou sbalit. *Vložit šablonu kroků* dá čtyři startovní kroky. *Udělat z kroků samostatné úkoly* rozdělí úkol na nezávislé lehké úkoly (jde vrátit tlačítkem Zpět).
@@ -71,6 +72,24 @@ Stránka **Rutiny** v menu je pro seznamy úkolů, které se ti čas od času op
 - **Přidat do úkolů** vloží všechny úkoly rutiny jako lístky do zvolené kategorie (do zásobníku). Co už z rutiny máš nehotové, se nepřidá podruhé.
 - Když je rutina na řadě, nabídne ti to stránka **Dnes** (*Přidat do zásobníku* nebo *Zítra*). Nic se samo nepřidá, aby tě aplikace nezahltila.
 - Rutiny jsou součástí dat uživatele a synchronizují se stejně jako úkoly. Smazání rutiny nesmaže úkoly, které z ní už vznikly. Smazání kategorie smaže i její rutiny.
+
+### Přehled: historie energie, statistiky a odhad
+Každý den, kdy zadáš **Stav dne** (energie a vytížení), se uloží do tvých dat jako jeden záznam. Chybějící den můžeš doplnit tlačítkem *Doplnit den* na stránce **Přehled**, špatný záznam upravit nebo smazat.
+
+Co Přehled ukazuje:
+- **Odhad na dnes a dalších 6 dní** (energie i vytížení s pravděpodobným rozmezím). Od 7 zadaných dnů. Ve Stavu dne je podle odhadu předvyplněno, dokud dnešek nezadáš. Rozhoduješ vždy ty.
+- **Posledních 30 dní** v grafu a odhad tečkovaně.
+- **Týdenní rytmus** (průměr podle dne v týdnu), od 14 dní.
+- **Tvůj cyklus (experimentální)**: když se v datech zřetelně opakuje vzorec po 18–45 dnech, aplikace ho najde, ukáže, v které části právě jsi, a kdy čekat vyšší a nižší energii. Hledá se až od 35 zadaných dní. Volitelně můžeš označit začátek svého pravidelného cyklu (stačí 2×), odhad je pak přesnější.
+- **Kolik zvládneš při jaké energii**: průměr splněných úkolů a bodů v pásmech nízké, střední a vysoké energie (od prvního splněného úkolu v aplikaci).
+
+Jak odhad vzniká (kód je v `stats.js`, testy na umělých datech ověřují, že cyklus najde a že v šumu nebo při pomalém trendu cyklus nevymýšlí):
+1. odečte se průměr a vliv dne v týdnu (zmenšený, když je dat málo),
+2. ze zbytku se hledá opakování nebo se použijí tvoje označené začátky,
+3. zbytky se složí podle pozice v cyklu a vyhladí,
+4. odhad = průměr + den v týdnu + cyklus (zmenšený podle jistoty) + doznívající vliv posledních dní.
+
+**Je to statistika z tvých vlastních záznamů, ne měření a ne zdravotní pomůcka.** Čím víc dní zadáš, tím lepší odhad. Nepravidelný život (nemoc, cestování, zkouškové) odhad zhorší. Když ti nesedí, ignoruj ho.
 
 ## 5. Co v aplikaci pomáhá s ADHD (a proč)
 | Potíž | Co aplikace dělá |
@@ -92,6 +111,7 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | Soubor | K čemu |
 |---|---|
 | `index.html`, `style.css`, `app.js` | Aplikace |
-| `plan.js` | Výpočet doporučení |
+| `plan.js` | Výpočet doporučení na dnes |
+| `stats.js` | Statistiky a odhad energie |
 | `users.js` | Seznam uživatelů a tokenů (vyplňuje správce) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline režim a instalace na mobil |
