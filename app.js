@@ -1537,7 +1537,8 @@
     btn.disabled = true; btn.textContent = "Otevírám…";
     try {
       const entry = usersMap()[name];
-      const cfg = entry && entry.token ? { repo: entry.repo || window.STICKIES_REPO, token: entry.token, path: entry.path } : null;
+      const tok = entry ? (Array.isArray(entry.token) ? entry.token.join("") : entry.token) : "";
+      const cfg = tok ? { repo: entry.repo || window.STICKIES_REPO, token: String(tok).trim(), path: entry.path } : null;
       if (!cfg || !cfg.repo) { err.textContent = "Takové jméno neznám. Zkontroluj, jak ho píšeš, nebo se zeptej správce."; return; }
       store.set(K.session, { user: name, cfg });
       start(name, cfg);

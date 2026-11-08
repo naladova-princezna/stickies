@@ -24,11 +24,13 @@ Na GitHubu otevři `users.js` v repozitáři s aplikací → tužka (Edit) a vyp
 ```js
 window.STICKIES_REPO = "vlastnik/stickies-data";   // tvůj soukromý datový repozitář
 window.STICKIES_USERS = {
-  "magda": { token: "github_pat_..." },
-  "petr":  { token: "github_pat_..." },
+  "magda": { token: ["github_pat_11ABCDE", "zbytek tokenu"] },
+  "petr":  { token: ["github_pat_11KLMNO", "zbytek tokenu"] },
 };
 ```
 Pak *Commit changes*. Za minutu je to na webu.
+
+**Token musí být rozdělený na dvě části** (uvozovky, čárka mezi nimi, rozdělit lze kdekoli uprostřed). GitHub totiž prohledává veřejné repozitáře a celý token v nich okamžitě sám zneplatní. Rozdělený token nepozná. Aplikace obě části před použitím spojí.
 
 - Jméno piš malými písmeny, bez mezer a diakritiky. Při přihlášení na velikosti písmen nezáleží.
 - Uživatel otevře stránku, napíše jen své jméno a vidí své úkoly. Žádné heslo ani nastavování.
@@ -37,7 +39,7 @@ Pak *Commit changes*. Za minutu je to na webu.
 - Dokud v `users.js` nejsou žádní uživatelé, aplikace běží bez přihlášení jen v zařízení.
 
 ### Bezpečnost, upřímně
-- **`users.js` je veřejný, takže token v něm je vidět každému, kdo ten soubor otevře.** Kdo ho najde, může číst a měnit data v datovém repozitáři. Datový repozitář tím pádem není soukromý.
+- **Rozdělení tokenu zabrání jen automatickému zneplatnění od GitHubu, ne čtení. `users.js` je veřejný, takže token v něm je vidět každému, kdo ten soubor otevře.** Kdo ho najde, může číst a měnit data v datovém repozitáři. Datový repozitář tím pádem není soukromý.
 - Škodu to omezuje fine-grained token jen na jeden datový repozitář a jen s právem Contents. Nikdo se přes něj nedostane k tvým jiným repozitářům. Může ale úkoly přečíst nebo smazat. Historie commitů umožní data obnovit.
 - Nedávej do aplikace nic, co nesmí vidět cizí člověk. Adresu webu nikde nezveřejňuj.
 - Kdyby se token zneužil, na GitHubu ho zruš a vytvoř nový.
