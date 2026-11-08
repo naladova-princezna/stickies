@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sticky úkoly</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- PŘIHLÁŠENÍ -->
+  <section id="login-view" class="login hidden">
+    <form id="login-form" class="login-card" autocomplete="off">
+      <h1>to do <span>úkoly</span></h1>
+      <label>Uživatelské jméno
+        <input id="login-username" type="text" required autofocus>
+      </label>
+      <label id="login-password-wrap" class="hidden">Heslo
+        <input id="login-password" type="password">
+      </label>
+      <p id="login-error" class="error"></p>
+      <button type="submit" class="btn-primary">Přihlásit se</button>
+    </form>
+  </section>
+
+  <!-- APLIKACE -->
+  <main id="app-view" class="hidden">
+    <header class="topbar">
+      <h1>to do <span>dnes</span></h1>
+      <form id="add-form" class="add-form">
+        <input id="add-text" type="text" placeholder="Nový úkol…" required maxlength="120">
+        <select id="add-category"></select>
+        <button class="btn-primary" type="submit">+ Přidat</button>
+      </form>
+      <div class="user">
+        <span id="user-name"></span>
+        <button id="logout-btn" class="btn-ghost">Odhlásit</button>
+      </div>
+    </header>
+
+    <!-- DVĚ HLAVNÍ SEKCE -->
+    <div class="spread">
+      <section class="page">
+        <h2>dnešní <span>priority</span></h2>
+        <div id="today-list" class="notes"></div>
+      </section>
+      <section class="page">
+        <h2>hotovo <span>dnes</span></h2>
+        <div id="done-list" class="notes"></div>
+      </section>
+    </div>
+
+    <!-- KATEGORIE -->
+    <section class="backlog">
+      <div class="backlog-head">
+        <h2>všechny <span>úkoly</span></h2>
+        <button id="add-category-btn" class="btn-ghost">+ kategorie</button>
+      </div>
+      <p class="hint">Kliknutím na lísteček ho přesuneš do dnešních priorit.</p>
+      <div id="categories" class="categories"></div>
+    </section>
+  </main>
+
+  <!-- EDITACE -->
+  <dialog id="edit-dialog">
+    <form id="edit-form" method="dialog">
+      <h3>Upravit úkol</h3>
+      <label>Text
+        <input id="edit-text" type="text" required maxlength="120">
+      </label>
+      <label>Kategorie
+        <select id="edit-category"></select>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="edit-cancel" class="btn-ghost">Zrušit</button>
+        <button type="submit" class="btn-primary">Uložit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="users.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
