@@ -871,3 +871,15 @@ html[data-still="1"] *, html[data-still="1"] *::before, html[data-still="1"] *::
   .wk-bars { height: 96px; }
 }
 @media (max-width: 860px) { .ch-t { font-size: 20px; } .chart circle[r="3.6"] { r: 6px; } }
+
+/* ===== v7.1: opravy přetékání (dlouhé názvy kategorií, dialogy) ===== */
+.sidebar { overflow-x: hidden; }
+.side-nav { grid-template-columns: minmax(0, 1fr); }
+.side-section, .side-head, .nav-item { min-width: 0; }
+.nav-item .nav-n { flex: none; }
+.nav-item .nav-label { flex: 1 1 0; }
+dialog { overflow-x: hidden; }
+dialog form { grid-template-columns: minmax(0, 1fr); }
+.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+#edit-dialog .two { grid-template-columns: minmax(0, 1fr); }
+dialog select, dialog input[type="text"], dialog textarea { max-width: 100%; }
