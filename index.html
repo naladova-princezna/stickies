@@ -211,11 +211,12 @@
               <h1 id="h-backlog">Zásobník</h1>
             </div>
             <div class="head-actions">
+              <div id="back-view" class="seg-switch" role="group" aria-label="Řazení zásobníku"></div>
               <button id="pick-me" class="btn" type="button"><svg class="i"><use href="#i-shuffle"/></svg>Vyber za mě</button>
               <span class="count count-lg" id="count-backlog">0</span>
             </div>
           </div>
-          <p class="muted hint">Klepnutím na lístek ho přesuneš do dnešních priorit. Jak moc se to dnes vyplatí, ti poradí stránka Dnes.</p>
+          <p class="muted hint">Klepnutím na lístek ho přesuneš do dnešních priorit. Do skupiny Hoří deadline, Priorita nebo Počká ho zařadíš výběrem přímo na lístku. Jak moc se to dnes vyplatí, ti poradí stránka Dnes.</p>
           <div id="backlog-grid" class="cat-grid" data-zone="backlog"></div>
         </section>
 
@@ -309,6 +310,17 @@
         <div class="field">
           <span class="lbl" id="edit-effort-lbl">Náročnost</span>
           <div id="edit-effort" class="seg-wrap" role="group" aria-labelledby="edit-effort-lbl"></div>
+        </div>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="edit-lane">Skupina v zásobníku</label>
+          <select id="edit-lane"></select>
+        </div>
+        <div class="field" id="edit-due-field" hidden>
+          <label for="edit-due">Termín z předmětu</label>
+          <input id="edit-due" type="date">
+          <p id="edit-due-hint" class="steps-hint"></p>
         </div>
       </div>
       <div class="field" id="steps-field">

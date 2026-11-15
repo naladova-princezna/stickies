@@ -894,6 +894,26 @@ dialog select, dialog input[type="text"], dialog textarea { max-width: 100%; }
   .study-frame { height: calc(100dvh - 190px); }
 }
 
+/* ---------- Skupiny v zásobníku ---------- */
+.seg-switch { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid var(--line-2); }
+.seg-btn { height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: none; color: var(--muted); font-weight: 700; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.seg-btn[aria-pressed="true"] { background: rgba(31, 224, 184, .15); color: #a5f7e2; }
+.head-actions { flex-wrap: wrap; }
+.lane { --lc: #6fb7c9; border-top: 3px solid var(--lc); }
+.lane-fire { --lc: #ff9f5a; background: rgba(255, 159, 90, .06); }
+.lane-prio { --lc: #8f84ff; background: rgba(124, 108, 255, .07); }
+.lane-wait { --lc: #6fb7c9; }
+.lane-dot { width: 10px; height: 10px; margin-left: 4px; border-radius: 50%; background: var(--lc); flex: none; }
+.lane-hint { margin: -4px 0 12px; font-size: 13px; color: var(--muted); }
+select.lane-sel {
+  width: auto; max-width: 150px; min-height: 34px; height: 34px; padding: 0 28px 0 12px; font-size: 13px; font-weight: 800;
+  border-radius: 99px; border: 1px solid var(--lc, var(--line-2)); background-color: transparent; background-position: right 10px center;
+}
+select.lane-sel.lane-fire { --lc: #ff9f5a; color: #ffc89c; }
+select.lane-sel.lane-prio { --lc: #8f84ff; color: #c9c3ff; }
+select.lane-sel.lane-wait { --lc: #6fb7c9; color: var(--muted); }
+@media (pointer: coarse) { select.lane-sel { min-height: 40px; height: 40px; } }
+
 /* ---------- Tisk ---------- */
 #print-root { display: none; }
 @media print {

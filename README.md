@@ -56,7 +56,7 @@ Pak *Commit changes*. Za minutu je to na webu.
 
 ## 4. Jak se s tím pracuje
 - **Dnes**: dnešní priority (nahoře karta **Teď**), hotovo dnes a **Stav dne**.
-- **Zásobník**: všechny kategorie vedle sebe, **Vyber za mě**, v každé kategorii nejvýš 6 lístků a tlačítko pro zbytek.
+- **Zásobník**: lístky jsou ve třech skupinách **Hoří deadline**, **Priorita** a **Počká**. Skupinu měníš výběrem přímo na lístku nebo v *Upravit úkol*. Nová skupina je vždy Počká. Uvnitř skupiny jsou nahoře lístky s nejbližším termínem, pak podle kategorie. Přepínač nahoře vrátí původní pohled po kategoriích. Je tu i **Vyber za mě** a v každé skupině nejvýš 8 lístků a tlačítko pro zbytek.
 - **Rutiny**: opakující se seznamy úkolů (viz níže).
 - **Vytisknout úkoly** (tlačítko ve spodu postranního panelu): vytiskne úkoly ze všech kategorií po kategoriích. Volitelně s kroky a s hotovými úkoly. V okně tisku jde zvolit uložení do PDF.
 - **Přehled**: historie energie a vytížení, statistiky a odhad (viz níže).
@@ -101,7 +101,7 @@ Stránka **Studium** je studijní pomocník navržený tak, aby ses neztratila v
 - Každý uživatel má **vlastní studia**, jsou součástí jeho souboru `data/<jméno>.json` (klíč `studies`) a synchronizují se stejně jako úkoly. Nový uživatel začíná s prázdnou stránkou a tlačítkem **Přidat studium**.
 - **Tisk předmětů**: na stránce **Předměty** tlačítko *Vytisknout* vytiskne všechny předměty po semestrech: kód, název, kredity, statut, způsob ukončení a výsledek s datem. V okně tisku jde zvolit uložení do PDF.
 - **Záloha a import**: *Nastavení a záloha* stáhne nebo zkopíruje všechna studia, a načte je zpět (i z jiného profilu).
-- **Úkoly ze studia**: u studia (Upravit údaje o studiu) vybereš seznam, tedy kategorii Stickies. Podmínky předmětů a úkoly závěrečné práce se tam objeví jako lístky (výchozí jsou jen ty s termínem, jde zvolit všechny nesplněné). Odškrtnutí platí na obou místech. Změna názvu nebo termínu ve Studiu přepíše lístek, úpravy lístku se nevracejí, smazaný lístek se znovu nevytvoří. Splněný předmět a smazaná podmínka uklidí nesplněné lístky.
+- **Úkoly ze studia**: u studia (Upravit údaje o studiu) vybereš seznam, tedy kategorii Stickies. Podmínky předmětů a úkoly závěrečné práce se tam objeví jako lístky (výchozí jsou jen ty s termínem, jde zvolit všechny nesplněné). Odškrtnutí platí na obou místech. Termín lístku z předmětu jde změnit i ve Stickies (*Upravit úkol*, pole *Termín z předmětu*), propíše se do předmětu ve Studiu. Termín tam nejde smazat, protože lístky vznikají jen z podmínek s termínem (u režimu „všechny nesplněné“ ano). Změna názvu nebo termínu ve Studiu přepíše lístek, úpravy lístku se nevracejí, smazaný lístek se znovu nevytvoří. Splněný předmět a smazaná podmínka uklidí nesplněné lístky.
 - Studium se zobrazuje v rámečku (`studium.html`, `studium.js`, `studium.css`). Slučuje se po studiích: při souběžné úpravě stejného studia na dvou zařízeních vyhrává novější uložení.
 - Pozor: **známky a kredity jsou v datovém repozitáři** stejně jako úkoly. Platí vše z části o bezpečnosti výše.
 
