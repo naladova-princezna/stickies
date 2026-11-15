@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="studium.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="top-row">
+      <div class="seg studies" id="studies" role="group" aria-label="Které studium"></div>
+      <div class="top-actions"><span id="status" role="status">Načítám…</span><button class="btn small" data-act="settings" type="button">Nastavení a záloha</button></div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Sekce studia"></nav>
+  </div>
+</header>
+<div class="wrap"><main id="view"><div class="empty">Načítám data…</div></main></div>
+<div id="modal-root"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<noscript><p style="padding:16px">Aplikace potřebuje zapnutý JavaScript.</p></noscript>
+<script src="studium.js"></script>
+</body>
+</html>

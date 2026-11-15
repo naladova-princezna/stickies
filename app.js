@@ -29,7 +29,7 @@
   function setNamespace(user) {
     USER = user;
     const p = user ? `stickies:v3:u:${user}:` : "stickies:v3:";
-    K.data = p + "data"; K.meta = p + "meta"; K.gh = p + "gh"; K.seeded = p + "seeded"; K.lastcat = p + "lastcat";
+    K.study = p + "study"; K.data = p + "data"; K.meta = p + "meta"; K.gh = p + "gh"; K.seeded = p + "seeded"; K.lastcat = p + "lastcat";
   }
   setNamespace(null);
 
@@ -132,6 +132,7 @@
         .map((s) => ({ id: String(s.id || uuid()), text: String(s.text).slice(0, 200), done: Boolean(s.done) })),
       updated_at: t.updated_at || EPOCH,
     };
+    if (t.link && t.link.r) o.link = { s: String(t.link.s || ""), r: String(t.link.r), x: String(t.link.x || ""), c: String(t.link.c || ""), d: Boolean(t.link.d) };
     if (t.routine_id) { o.routine_id = String(t.routine_id); o.routine_item = String(t.routine_item || ""); }
     if (t.deleted) o.deleted = true;
     return o;
@@ -166,6 +167,16 @@
     return o;
   }
 
+  /* Studium je pro hostitele jeden záznam; jeho obsah řeší stránka Studium (studium.js). */
+  const studyStr = (o) => { const c = { ...o }; delete c.updated_at; delete c.deleted; return stable(c); };
+  const studyMark = new WeakMap();      // objekt studia → obsah, jak je uložený (pro zjištění změn)
+  function nStudy(x) {
+    const o = x.deleted ? { id: String(x.id), deleted: true } : { ...x, id: String(x.id) };
+    o.updated_at = x.updated_at || EPOCH;
+    studyMark.set(o, studyStr(o));
+    return o;
+  }
+
   function normalize(raw) {
     const r = raw && typeof raw === "object" ? raw : {};
     const cats = (Array.isArray(r.categories) ? r.categories : []).filter((x) => x && x.id).map(nCat);
@@ -175,7 +186,8 @@
     for (const x of (Array.isArray(r.days) ? r.days : []).map(nDayRec).filter(Boolean)) map.set(x.id, x);
     const legacy = nDayRec(r.day);                       // starší verze ukládaly jen dnešek
     if (legacy && legacy.set && !map.has(legacy.id)) map.set(legacy.id, legacy);
-    return { categories: cats, tasks, routines, days: [...map.values()] };
+    const studies = (Array.isArray(r.studies) ? r.studies : []).filter((x) => x && x.id).map(nStudy);
+    return { categories: cats, tasks, routines, days: [...map.values()], studies };
   }
 
   const canon = (s) => stable({
@@ -183,6 +195,7 @@
     t: [...s.tasks].sort((a, b) => (a.id < b.id ? -1 : 1)),
     r: [...(s.routines || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     d: [...(s.days || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    s: [...(s.studies || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
   });
 
   function pickNewer(x, y) {
@@ -206,6 +219,7 @@
     const tasks = mergeLists(a.tasks, b.tasks);
     const routines = mergeLists(a.routines || [], b.routines || []);
     const days = mergeLists(a.days || [], b.days || []);
+    const studies = mergeLists(a.studies || [], b.studies || []);
     const alive = new Set(cats.filter((c) => !c.deleted).map((c) => c.id));
     const now = nowIso();
     for (const r of routines) {
@@ -216,14 +230,14 @@
     }
     const limit = Date.now() - TOMBSTONE_DAYS * 864e5;
     const fresh = (x) => !(x.deleted && (Date.parse(x.updated_at) || 0) < limit);
-    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh) };
+    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh) };
   }
 
   /** Změněným záznamům nastaví updated_at. */
   function touch(prev, next) {
     const now = nowIso();
     const strip = (o) => { const c = { ...o }; delete c.updated_at; return stable(c); };
-    for (const key of ["categories", "tasks", "routines", "days"]) {
+    for (const key of ["categories", "tasks", "routines", "days", "studies"]) {
       const pm = new Map((prev[key] || []).map((x) => [x.id, strip(x)]));
       for (const x of next[key] || []) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
     }
@@ -232,7 +246,7 @@
   /* =====================================================================
      Stav, uložení
      ===================================================================== */
-  let state = { categories: [], tasks: [], routines: [], days: [] };
+  let state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
   let meta = { sha: null, dirty: false };
   let gh = null;                    // {repo, token, path, branch}
   let version = 0;                  // počítadlo lokálních změn
@@ -281,6 +295,7 @@
     const before = clone(state);
     mutate(state);
     touch(before, state);
+    reconcileStudyLinks();
     version++;
     meta.dirty = true;
     persist();
@@ -292,6 +307,7 @@
           const cur = state;
           state = clone(before);
           touch(cur, state);
+          reconcileStudyLinks();
           version++;
           meta.dirty = true;
           persist();
@@ -434,8 +450,10 @@
           version++; persist(); render();
         }
         // Od teď synchronně: sloučit s aktuálním stavem (uživatel mohl mezitím něco změnit).
-        const merged = remote ? merge(state, remote.data) : state;
+        let merged = remote ? merge(state, remote.data) : state;
         if (canon(merged) !== canon(state)) { state = merged; version++; persist(); render(); }
+        if (reconcileStudyLinks()) { version++; persist(); render(); }
+        merged = state;
         const snapVer = version;
         const same = remote && canon(merged) === canon(remote.data);
         if (same) {
@@ -443,7 +461,7 @@
           if (snapVer === version) meta.dirty = false;
           settled = true;
         } else {
-          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [] }, remote ? remote.sha : null);
+          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [] }, remote ? remote.sha : null);
           if (res.conflict) continue;
           meta.sha = res.sha;
           if (snapVer === version) meta.dirty = false;
@@ -489,7 +507,7 @@
       const remote = await ghGetFile();
       if (remote && isPristine()) {
         // nové zařízení: neduplikovat výchozí kategorie, které už jinde existují
-        state = { categories: [], tasks: [], routines: [], days: [] };
+        state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
       }
       store.set(K.gh, cfg);
       store.set(K.seeded, true);
@@ -552,14 +570,163 @@
     }
   }
 
+
+  /* =====================================================================
+     Gamifikace: vše se dopočítává z hotových úkolů (žádná extra data, synchronizuje se samo)
+     ===================================================================== */
+  const XP_EFF = { light: 10, medium: 20, hard: 40 };
+  const LEVELS = [
+    ["🌱", "Semínko"], ["🌿", "Výhonek"], ["🍀", "Čtyřlístek"], ["🌼", "Kvítek"], ["🦋", "Motýlek"],
+    ["🌳", "Stromek"], ["🦊", "Liška"], ["🚀", "Raketa"], ["🌟", "Hvězda"], ["👑", "Královna"],
+    ["🎯", "Cíl"], ["🧩", "Puzzle"], ["🎨", "Paleta"], ["🪁", "Papírový drak"], ["🦉", "Sova"],
+    ["🐬", "Delfín"], ["🌊", "Vlna"], ["🏔️", "Vrcholek"], ["🌙", "Měsíc"], ["☀️", "Slunce"],
+    ["🌈", "Duha"], ["🔮", "Křišťál"], ["🪐", "Planeta"], ["🌌", "Galaxie"], ["🪄", "Kouzlo"],
+    ["🏰", "Hrad"], ["🗝️", "Klíč"], ["🛡️", "Štít"], ["🐲", "Drak"], ["♾️", "Nekonečno"],
+  ];
+  const lvlStart = (l) => 50 * l * (l - 1);
+  const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV", "XXV"];
+  const DAYN = ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota", "Neděle"];
+  const DAYL = ["v pondělí", "v úterý", "ve středu", "ve čtvrtek", "v pátek", "v sobotu", "v neděli"];
+  const MONN = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"];
+  const MONL = ["v lednu", "v únoru", "v březnu", "v dubnu", "v květnu", "v červnu", "v červenci", "v srpnu", "v září", "v říjnu", "v listopadu", "v prosinci"];
+  const SPECIAL = [
+    ["1.1", "🎆", "Nový rok", "na Nový rok"], ["14.2", "💌", "Valentýn", "na Valentýna"], ["29.2", "🐸", "Přestupný den", "29. února"],
+    ["8.3", "🌷", "Březnová růže", "8. března"], ["1.5", "🌸", "Prvomájová", "1. května"], ["1.6", "🎠", "Dětský den", "1. června"],
+    ["31.10", "🎃", "Dýně", "na Halloween"], ["28.10", "🇨🇿", "Státní svátek", "28. října"], ["17.11", "🕯️", "Den studentů", "17. listopadu"],
+    ["5.12", "😇", "Mikulášská", "na Mikuláše"], ["24.12", "🎄", "Štědrý den", "na Štědrý den"], ["31.12", "🥂", "Silvestr", "na Silvestra"],
+  ];
+  const BADGES = [];
+  /** family(id, emoji, název, popis s {n}, metrika, hranice) – každá hranice je jeden odznak */
+  function family(id, e, name, desc, key, steps) {
+    steps.forEach((n, i) => BADGES.push({ id: `${id}_${n}`, e, n: steps.length > 1 ? `${name} ${ROMAN[i] || i + 1}` : name, d: desc.replace("{n}", n), ok: (g) => key(g) >= n }));
+  }
+  const T50 = [1, 5, 10, 25, 50, 100, 200, 300];
+  family("t", "🎈", "Splněno", "{n} splněných úkolů celkem", (g) => g.total, [1, 5, 10, 15, 25, 40, 50, 75, 100, 150, 200, 250, 300, 400, 500, 600, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000]);
+  family("h", "🏔️", "Náročné", "{n} náročných úkolů", (g) => g.hard, [1, 3, 5, 10, 15, 25, 40, 50, 75, 100, 150, 200, 300, 500]);
+  family("m", "🧱", "Střední krok", "{n} středních úkolů", (g) => g.medium, [1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750]);
+  family("l", "🪶", "Lehká ruka", "{n} lehkých úkolů", (g) => g.light, [1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750]);
+  family("bd", "⚡", "Rozjezd", "{n} úkolů za jeden den", (g) => g.best, [2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20]);
+  family("ad", "📅", "Aktivní dny", "Aktivní alespoň {n} různých dní", (g) => g.days, [1, 3, 5, 7, 10, 14, 20, 30, 45, 60, 90, 120, 150, 200, 250, 300, 365, 400, 500, 730, 1000]);
+  family("d3", "🌤️", "Dobrý den", "{n} dní se 3 a více splněnými úkoly", (g) => g.d3, [1, 3, 5, 10, 20, 30, 50, 75, 100, 150, 200, 300, 365]);
+  family("d5", "☀️", "Skvělý den", "{n} dní s 5 a více splněnými úkoly", (g) => g.d5, [1, 3, 5, 10, 20, 50]);
+  family("dh", "🦁", "Odvážný den", "{n} dní s náročným úkolem", (g) => g.dh, [1, 5, 10, 25, 50, 100, 200]);
+  family("hd", "🔥", "Náročná dávka", "{n} náročných úkolů za jeden den", (g) => g.hardDay, [2, 3, 4, 5]);
+  family("wk", "🗓️", "Aktivní týdny", "Aktivní alespoň {n} různých týdnů", (g) => g.weeks, [1, 2, 4, 8, 12, 20, 26, 40, 52, 78, 104]);
+  family("bw", "🌊", "Pracovní týden", "{n} úkolů za jeden týden", (g) => g.bestWeek, [5, 10, 15, 20, 30, 50, 75, 100]);
+  family("bm", "🌕", "Pracovní měsíc", "{n} úkolů za jeden měsíc", (g) => g.bestMonth, [10, 25, 50, 100, 150, 200, 300, 500]);
+  family("ro", "🔁", "Rutina", "{n} splněných úkolů z rutin", (g) => g.routine, [1, 5, 10, 25, 50, 100, 200, 300, 500, 750, 1000]);
+  family("st", "🎓", "Studentka", "{n} splněných úkolů ze Studia", (g) => g.study, [1, 3, 5, 10, 20, 30, 50, 75, 100, 150, 200]);
+  family("ct", "🧭", "Všestranná", "Splněné úkoly v {n} různých seznamech", (g) => g.cats, [2, 3, 4, 5, 6, 8, 10, 12, 15]);
+  family("sp", "🪜", "Po krůčcích", "{n} splněných kroků v úkolech", (g) => g.steps, [1, 10, 25, 50, 100, 250, 500, 1000]);
+  family("cb", "🤗", "Vítej zpět", "{n}× ses vrátila po aspoň týdenní pauze. Žádné výčitky, jen radost", (g) => g.back, [1, 2, 3, 5, 10]);
+  family("mo", "🌅", "Ranní ptáče", "{n} úkolů splněných před 9:00", (g) => g.hrs.slice(0, 9).reduce((a, b) => a + b, 0), [1, 5, 10, 25, 50, 100, 200]);
+  family("nn", "🌞", "Poledne", "{n} úkolů splněných mezi 11:00 a 14:00", (g) => g.hrs.slice(11, 14).reduce((a, b) => a + b, 0), [1, 10, 25, 50, 100]);
+  family("ev", "🌆", "Podvečer", "{n} úkolů splněných mezi 17:00 a 22:00", (g) => g.hrs.slice(17, 22).reduce((a, b) => a + b, 0), [1, 5, 10, 25, 50, 100, 200]);
+  family("ni", "🦉", "Noční sova", "{n} úkolů splněných po 22:00 nebo před 5:00", (g) => g.hrs.slice(22).reduce((a, b) => a + b, 0) + g.hrs.slice(0, 5).reduce((a, b) => a + b, 0), [1, 5, 10, 25, 50, 100, 200]);
+  family("we", "🏖️", "Víkendová", "{n} úkolů splněných o víkendu", (g) => g.wd[5] + g.wd[6], [1, 5, 10, 25, 50, 100, 200, 300]);
+  family("wd", "💼", "Všední den", "{n} úkolů splněných ve všední den", (g) => g.total - g.wd[5] - g.wd[6], [1, 10, 25, 50, 100, 250, 500]);
+  DAYN.forEach((dn, i) => family("w" + i, ["🌑", "🔥", "🐪", "🍀", "🥳", "🎡", "🌻"][i], dn, `{n} úkolů splněných ${DAYL[i]}`, (g) => g.wd[i], T50));
+  MONN.forEach((mn, i) => family("o" + i, ["❄️", "🕊️", "🌱", "🐣", "🌺", "🍓", "🏖️", "🌾", "🍂", "🍁", "🌫️", "⛄"][i], mn, `{n} úkolů splněných ${MONL[i]}`, (g) => g.mo[i], [1, 5, 10, 25, 50, 100]));
+  for (let h24 = 0; h24 < 24; h24++) family("x" + h24, h24 < 6 ? "🌙" : h24 < 12 ? "🌄" : h24 < 18 ? "☀️" : "🌠", `V ${h24} hodin`, `{n} úkolů splněných mezi ${h24}:00 a ${h24}:59`, (g) => g.hrs[h24], [1, 10, 50]);
+  SPECIAL.forEach(([k, e, n, w]) => family("s" + k.replace(".", "_"), e, n, `Splň úkol ${w}`, (g) => g.sp[k] || 0, [1]));
+  family("lv", "🎖️", "Úroveň", "Dosáhni úrovně {n}", (g) => g.level, Array.from({ length: 29 }, (_, i) => i + 2));
+  family("xp", "✨", "Zásoba XP", "{n} XP celkem", (g) => g.xp, [100, 250, 500, 1000, 1500, 2500, 4000, 6000, 8000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000, 150000, 200000, 300000]);
+  BADGES.push({ id: "all3", e: "🌈", n: "Duhový den", d: "Lehký, střední i náročný úkol v jednom dni", ok: (g) => g.all3 });
+  BADGES.push({ id: "clr", e: "🧹", n: "Čistý stůl", d: "Splň vše, co sis na dnes naplánovala", ok: (g) => g.cleared });
+  const BADGE_TOTAL = BADGES.length;
+
+  let gameCache = { key: "", val: null };
+  function gameStats() {
+    const key = `${version}|${dayKey()}`;
+    if (gameCache.key === key) return gameCache.val;
+    let xp = 0, total = 0, hard = 0, medium = 0, light = 0, routine = 0, study = 0, today = 0, steps = 0;
+    const perDay = {}, perHard = {}, perWeek = {}, perMonth = {}, cats = new Set(), effDay = {};
+    const hrs = Array(24).fill(0), wd = Array(7).fill(0), mo = Array(12).fill(0), sp = {};
+    const weekKey = (d) => { const t = new Date(d); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7)); const y = t.getFullYear(); return y + "-" + Math.floor((t - new Date(y, 0, 1)) / 6048e5); };
+    for (const t of liveTasks()) {
+      steps += (t.steps || []).filter((x) => x.done).length;
+      if (t.status !== "done" || !t.done_at) continue;
+      const d = new Date(t.done_at), k = dayKey(d);
+      total++; xp += XP_EFF[t.effort] || 20;
+      if (t.effort === "hard") { hard++; perHard[k] = (perHard[k] || 0) + 1; } else if (t.effort === "light") light++; else medium++;
+      (effDay[k] = effDay[k] || new Set()).add(t.effort);
+      if (t.routine_id) routine++;
+      if (t.link) study++;
+      cats.add(t.category_id);
+      perDay[k] = (perDay[k] || 0) + 1;
+      const wk = weekKey(d), mk = d.getFullYear() + "-" + d.getMonth();
+      perWeek[wk] = (perWeek[wk] || 0) + 1; perMonth[mk] = (perMonth[mk] || 0) + 1;
+      hrs[d.getHours()]++; wd[(d.getDay() + 6) % 7]++; mo[d.getMonth()]++;
+      const sk = d.getDate() + "." + (d.getMonth() + 1); sp[sk] = (sp[sk] || 0) + 1;
+      if (k === dayKey()) today++;
+    }
+    let level = 1; while (xp >= lvlStart(level + 1)) level++;
+    const a = lvlStart(level), b = lvlStart(level + 1), dayKeys = Object.keys(perDay).sort();
+    let back = 0;
+    for (let i = 1; i < dayKeys.length; i++) if ((new Date(dayKeys[i]) - new Date(dayKeys[i - 1])) / 864e5 >= 7) back++;
+    const cnt = (n) => Object.values(perDay).filter((v) => v >= n).length;
+    const li = LEVELS[Math.min(level, LEVELS.length) - 1];
+    const g = {
+      xp, total, hard, medium, light, routine, study, today, level, steps, hrs, wd, mo, sp, back,
+      into: xp - a, span: b - a, pct: Math.round(((xp - a) / (b - a)) * 100), icon: li[0], title: li[1],
+      best: Math.max(0, ...Object.values(perDay)), days: dayKeys.length, cats: cats.size,
+      d3: cnt(3), d5: cnt(5), dh: Object.keys(perHard).length, hardDay: Math.max(0, ...Object.values(perHard)),
+      weeks: Object.keys(perWeek).length, bestWeek: Math.max(0, ...Object.values(perWeek)), bestMonth: Math.max(0, ...Object.values(perMonth)),
+      all3: Object.values(effDay).some((x) => x.size >= 3),
+      cleared: today >= 1 && todayOpen().length === 0,
+    };
+    g.badges = new Set(BADGES.filter((x) => x.ok(g)).map((x) => x.id));
+    gameCache = { key, val: g };
+    return g;
+  }
+  /** Nenápadné tlačítko v postranním panelu */
+  function renderGameBtn() {
+    const g = gameStats(), b = $("open-game");
+    b.replaceChildren(h("span", { class: "gb-e", "aria-hidden": "true" }, g.icon), h("span", { class: "gb-t" }, `Úroveň ${g.level} · ${g.title}`),
+      h("span", { class: "gb-bar", "aria-hidden": "true" }, h("i", { style: `width:${g.pct}%` })));
+    b.setAttribute("aria-label", `Úroveň ${g.level}, ${g.title}. Otevřít odznaky`);
+  }
+  let gameFilter = "all";
+  function renderGameDialog() {
+    const g = gameStats();
+    $("game-head").replaceChildren(
+      h("div", { class: "g-av", "aria-hidden": "true" }, g.icon),
+      h("div", { class: "g-who" },
+        h("p", { class: "eyebrow" }, "Úroveň " + g.level),
+        h("h2", { id: "game-title" }, g.title),
+        h("div", { class: "g-bar", role: "img", "aria-label": `${g.into} z ${g.span} XP do další úrovně` }, h("i", { style: `width:${g.pct}%` })),
+        h("p", { class: "muted g-xp" }, `${g.into} / ${g.span} XP do další úrovně · celkem ${g.xp} XP`)));
+    const quests = [
+      { t: "Splň 1 úkol", n: Math.min(1, g.today), of: 1 }, { t: "Splň 3 úkoly", n: Math.min(3, g.today), of: 3 },
+      { t: "Zvládni něco náročného", n: Math.min(1, liveTasks().filter((t) => t.status === "done" && t.effort === "hard" && isToday(t.done_at)).length), of: 1 },
+    ];
+    $("game-quests").replaceChildren(...quests.map((q) => h("li", { class: q.n >= q.of ? "done" : "" }, h("span", { class: "g-ck", "aria-hidden": "true" }, q.n >= q.of ? "✓" : ""), h("span", {}, q.t))));
+    $("game-count").textContent = `${g.badges.size} / ${BADGE_TOTAL}`;
+    for (const x of $("game-filter").children) x.setAttribute("aria-pressed", String(x.dataset.f === gameFilter));
+    const list = BADGES.filter((b) => gameFilter === "all" || (gameFilter === "got") === g.badges.has(b.id))
+      .sort((a, b) => Number(g.badges.has(b.id)) < Number(g.badges.has(a.id)) ? -1 : Number(g.badges.has(b.id)) > Number(g.badges.has(a.id)) ? 1 : 0);
+    $("game-grid").replaceChildren(...list.map((b) => {
+      const on = g.badges.has(b.id);
+      return h("button", { type: "button", class: "g-badge" + (on ? " on" : ""), title: b.d, "data-bd": `${on ? "Získáno: " : "Zamčeno: "}${b.n}. ${b.d}` },
+        h("span", { class: "g-bi", "aria-hidden": "true" }, on ? b.e : "🔒"), h("b", {}, b.n));
+    }));
+    $("game-detail").textContent = "Klepni na odznak pro popis.";
+    $("game-foot").textContent = "Lehký úkol dává 10 XP, střední 20 a náročný 40. Nic se neodebírá a žádné série se neztrácejí.";
+  }
+  function openGame() { renderGameDialog(); $("game-dialog").showModal(); }
+
   const act = {
     complete(id, src) {
       const rect = src ? src.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, height: 0 };
       const open = todayOpen();
       const last = open.length === 1 && open[0].id === id;
       const msg = last ? "Dnešek je splněný. Teď si můžeš odpočinout." : PRAISE[doneToday().length % PRAISE.length];
+      const g0 = gameStats();
       commit((s) => { const t = s.tasks.find((x) => x.id === id); t.status = "done"; t.done_at = nowIso(); }, msg);
-      celebrate(rect, last);
+      const g1 = gameStats();
+      const up = g1.level > g0.level, fresh = BADGES.filter((b) => g1.badges.has(b.id) && !g0.badges.has(b.id)), nb = fresh[0];
+      $("toast-msg").textContent = up ? `Nová úroveň: ${g1.icon} ${g1.title}!` : nb ? `Nový odznak: ${nb.e} ${nb.n}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ""}` : `${msg} +${g1.xp - g0.xp} XP`;
+      celebrate(rect, last || up || Boolean(nb));
     },
     reopen(id) {
       commit((s) => {
@@ -618,13 +785,169 @@
   };
 
   /* =====================================================================
+     Studium: stránka v rámečku (studium.html), data jsou součástí dat uživatele
+     ===================================================================== */
+  const liveStudies = () => state.studies.filter((s) => !s.deleted);
+  let studyFrame = null, studyRoute = "";
+
+  /* ---------- Úkoly ze studia ve vybraném seznamu (kategorii) ----------
+     Podmínka předmětu (nebo úkol závěrečné práce) se zobrazí jako lístek v kategorii, kterou si u studia vybereš.
+     Odškrtnutí platí oběma směry. Změna textu nebo termínu ve Studiu přepíše lístek, úpravy lístku ve Stickies
+     se nevracejí. Smazaný lístek se znovu nevytvoří. */
+  const studyThesisLabel = (st) => (st.level === "bc" ? "Bakalářka" : st.level === "phd" ? "Disertace" : st.level === "other" ? "Závěrečná práce" : "Diplomka");
+  function studyTaskText(label, r) {
+    let t = `${label}: ${String(r.title || "").trim()}`;
+    if (r.due) { const d = new Date(r.due + "T00:00:00"); t += ` (do ${d.getDate()}. ${d.getMonth() + 1}.)`; }
+    return t.slice(0, 200);
+  }
+  function reconcileStudyLinks() {
+    const now = nowIso();
+    let changed = false;
+    const cats = new Set(liveCats().map((c) => c.id));
+    const byId = new Map(state.tasks.map((t) => [t.id, t]));
+    const reqMap = new Map();
+    const kill = (t) => { if (!t.deleted) { t.deleted = true; t.updated_at = now; changed = true; } };
+    let n = 0;
+    for (const st of liveStudies()) {
+      const catOk = Boolean(st.category_id) && cats.has(st.category_id);
+      const all = st.taskMode === "all";
+      const items = [];
+      for (const sj of st.subjects || []) {
+        const passed = Boolean(sj.grade) && sj.grade !== "F";
+        const label = sj.code || String(sj.name || "").slice(0, 30);
+        for (const r of sj.reqs || []) items.push({ r, label, passed });
+      }
+      for (const r of (st.thesis && st.thesis.tasks) || []) items.push({ r, label: studyThesisLabel(st), passed: false });
+      for (const { r, label, passed } of items) {
+        reqMap.set(st.id + "/" + r.id, r);
+        const t = r.tid ? byId.get(r.tid) : null;
+        const alive = t && !t.deleted;
+        const wanted = catOk && !passed && (all || Boolean(r.due));
+        const text = studyTaskText(label, r);
+        if (alive) {
+          const tdone = t.status === "done";
+          if (!t.link) t.link = { s: st.id, r: r.id, x: "", c: "", d: Boolean(r.done) };
+          if (tdone !== Boolean(t.link.d)) {                 // změnilo se ve Stickies
+            if (Boolean(r.done) !== tdone) { r.done = tdone; r.doneAt = tdone ? dayKey() : ""; }
+            t.link.d = tdone; t.updated_at = now; changed = true;
+          } else if (Boolean(r.done) !== tdone) {            // změnilo se ve Studiu
+            if (r.done) { t.status = "done"; t.done_at = now; } else { t.status = "backlog"; t.done_at = null; }
+            t.link.d = Boolean(r.done); t.updated_at = now; changed = true;
+          }
+          if (t.status !== "done") {
+            if (!wanted) { kill(t); r.tid = ""; changed = true; continue; }
+            let touched = false;
+            if (t.link.x !== text) { t.text = text; t.link.x = text; touched = true; }
+            if (t.link.c !== st.category_id) { t.category_id = st.category_id; t.link.c = st.category_id; touched = true; }
+            if (touched) { t.updated_at = now; changed = true; }
+          }
+        } else if (!r.tid && wanted && !r.done) {
+          const id = uuid();
+          const w = Number(r.weight) || 1;
+          state.tasks.push({
+            id, category_id: st.category_id, text, status: "backlog", done_at: null, pos: Date.now() + n++,
+            effort: w >= 3 ? "hard" : w === 2 ? "medium" : "light", steps: [], updated_at: now,
+            link: { s: st.id, r: r.id, x: text, c: st.category_id, d: false },
+          });
+          r.tid = id; changed = true;
+        }
+      }
+    }
+    // lístky, jejichž podmínka už neexistuje (nebo ukazuje na jiný lístek), se uklidí
+    for (const t of state.tasks) {
+      if (t.deleted || !t.link) continue;
+      const r = reqMap.get(t.link.s + "/" + t.link.r);
+      if ((!r || r.tid !== t.id) && t.status !== "done") kill(t);
+    }
+    if (changed) {
+      for (const st of liveStudies()) {
+        const str = studyStr(st);
+        if (studyMark.get(st) !== str) { st.updated_at = now; studyMark.set(st, str); }
+      }
+    }
+    return changed;
+  }
+
+  /** Rozhraní, které používá stránka Studium (rámeček je ze stejného původu). */
+  window.StickiesStudy = {
+    getStudies: () => liveStudies(),
+    getActive: () => store.get(K.study, ""),
+    /** Stav lístku podle id: "today", "backlog", "done" nebo "" (neexistuje). */
+    taskState: (id) => { const t = taskById(id); return t ? t.status : ""; },
+    focus: (id) => { if (taskById(id)) openFocus(id); },
+    toToday: (id) => { if (taskById(id)) act.toToday(id); },
+    getCategories: () => liveCats().map((c) => ({ id: c.id, name: c.name })),
+    setActive: (id) => store.set(K.study, id),
+    /** Doplnění výchozích polí při načtení není změna dat. */
+    mark: (list) => { for (const x of list) studyMark.set(x, studyStr(x)); },
+    /** Uloží studia ze stránky (objekty se v ní mění na místě). Změněným nastaví updated_at, chybějící smaže. */
+    setStudies(list) {
+      const now = nowIso();
+      const ids = new Set(list.map((x) => x.id));
+      let changed = false;
+      for (const x of list) {
+        const str = studyStr(x);
+        if (studyMark.get(x) !== str || x.deleted) { x.updated_at = now; delete x.deleted; studyMark.set(x, str); changed = true; }
+      }
+      const gone = state.studies.filter((x) => !x.deleted && !ids.has(x.id)).map((x) => nStudy({ id: x.id, deleted: true, updated_at: now }));
+      if (gone.length) changed = true;
+      const keepTombs = state.studies.filter((x) => x.deleted && !ids.has(x.id));
+      if (!changed) return;
+      state.studies = [...list, ...keepTombs, ...gone];
+      reconcileStudyLinks();
+      version++; meta.dirty = true; persist(); scheduleSave();
+      setTimeout(render, 0);
+    },
+    route(r, push) {
+      if (r === studyRoute) return;
+      studyRoute = r;
+      const h = "#/studium/" + r;
+      if (location.hash === h) return;
+      if (push) history.pushState(null, "", h); else history.replaceState(null, "", h);
+      ROUTE = { name: "studium", sub: r };
+    },
+  };
+
+  function studyGoto(sub) {
+    if (!sub || sub === studyRoute) return;
+    studyRoute = sub;
+    const w = studyFrame && studyFrame.contentWindow;
+    if (w && w.Studium) w.Studium.go(sub);
+  }
+
+  function renderStudy() {
+    const box = $("study-box");
+    if (!studyFrame) {
+      studyFrame = h("iframe", { class: "study-frame", title: "Studium", src: "studium.html" + (ROUTE.sub ? "#" + ROUTE.sub : "") });
+      studyRoute = ROUTE.sub || "";
+      studyFrame.addEventListener("load", syncStudyFrame);
+      box.replaceChildren(studyFrame);
+    } else {
+      syncStudyFrame();
+      const w = studyFrame.contentWindow;
+      if (w && w.Studium) w.Studium.refresh();
+    }
+  }
+
+  /** Předá rámečku nastavení vzhledu z „Pohodlí a vzhled“. */
+  function syncStudyFrame() {
+    const d = studyFrame && studyFrame.contentDocument;
+    if (!d) return;
+    const r = d.documentElement;
+    r.style.setProperty("--fs", String(prefs.fs));
+    r.dataset.calm = prefs.calm ? "1" : "0";
+    r.dataset.still = prefs.still ? "1" : "0";
+  }
+
+  /* =====================================================================
      Routing
      ===================================================================== */
   let ROUTE = { name: "dnes" };
 
   function parseRoute() {
-    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|prehled|kat)(?:\/([\w-]+))?$/);
+    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|prehled|kat|studium)(?:\/([\w-]+))?$/);
     if (!m) return { name: "dnes" };
+    if (m[1] === "studium") return { name: "studium", sub: m[2] || "" };
     if (m[1] === "kat") return catById(m[2]) ? { name: "kat", id: m[2] } : { name: "dnes", fix: true };
     return { name: m[1] };
   }
@@ -638,6 +961,7 @@
       window.scrollTo(0, 0);
       setComposerDefaults();
     }
+    if (ROUTE.name === "studium") studyGoto(ROUTE.sub);
     render();
     if (!initial) { const mainEl = $("main"); if (mainEl) mainEl.focus({ preventScroll: true }); }
   }
@@ -655,15 +979,18 @@
     pendingFocus = null;
 
     renderSide();
+    renderGameBtn();
     $("view-today").hidden = ROUTE.name !== "dnes";
     $("view-backlog").hidden = ROUTE.name !== "zasobnik";
     $("view-cat").hidden = ROUTE.name !== "kat";
     $("view-routines").hidden = ROUTE.name !== "rutiny";
     $("view-stats").hidden = ROUTE.name !== "prehled";
+    $("view-study").hidden = ROUTE.name !== "studium";
     if (ROUTE.name === "dnes") renderToday();
     else if (ROUTE.name === "zasobnik") renderBacklog();
     else if (ROUTE.name === "rutiny") renderRoutines();
     else if (ROUTE.name === "prehled") renderStats();
+    else if (ROUTE.name === "studium") renderStudy();
     else renderCat();
     renderComposerOptions();
     setTitle();
@@ -1777,6 +2104,7 @@
       const incoming = normalize(raw);
       const before = liveTasks().length;
       state = merge(state, incoming);
+      reconcileStudyLinks();
       version++; meta.dirty = true; persist(); render(); scheduleSave();
       $("store-dialog").close();
       toast(`Záloha načtena. Přibylo ${Math.max(0, liveTasks().length - before)} úkolů.`);
@@ -1814,7 +2142,7 @@
     r.dataset.calm = prefs.calm ? "1" : "0";
     r.dataset.still = prefs.still ? "1" : "0";
   }
-  function savePrefs() { store.set(K.pref, prefs); applyPrefs(); }
+  function savePrefs() { store.set(K.pref, prefs); applyPrefs(); syncStudyFrame(); }
   function buildPrefs() {
     $("pref-fs").replaceChildren(...FS_OPTIONS.map(([v, label]) => h("label", { class: "seg" },
       h("input", Object.assign({ type: "radio", name: "pref-fs", value: String(v) }, prefs.fs === v ? { checked: true } : {})),
@@ -1825,6 +2153,9 @@
       $(id).addEventListener("change", () => { prefs[key] = $(id).checked; savePrefs(); });
     }
   }
+  $("open-game").addEventListener("click", () => { closeSide(); openGame(); });
+  $("game-filter").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) { gameFilter = b.dataset.f; renderGameDialog(); } });
+  $("game-grid").addEventListener("click", (e) => { const b = e.target.closest("[data-bd]"); if (b) $("game-detail").textContent = b.dataset.bd; });
   $("open-prefs").addEventListener("click", () => { closeSide(); $("prefs-dialog").showModal(); });
 
   /* =====================================================================
@@ -2028,9 +2359,10 @@
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
-      state = { categories: [], tasks: [], routines: [], days: [] };
+      state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
       seedDefaults();
     }
+    if (reconcileStudyLinks()) { version++; meta.dirty = true; persist(); }
     ROUTE = parseRoute();
     if (ROUTE.fix) { ROUTE = { name: "dnes" }; history.replaceState(null, "", "#/dnes"); }
     setComposerDefaults();

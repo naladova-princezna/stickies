@@ -91,6 +91,19 @@ Jak odhad vzniká (kód je v `stats.js`, testy na umělých datech ověřují, �
 
 **Je to statistika z tvých vlastních záznamů, ne měření a ne zdravotní pomůcka.** Čím víc dní zadáš, tím lepší odhad. Nepravidelný život (nemoc, cestování, zkouškové) odhad zhorší. Když ti nesedí, ignoruj ho.
 
+### Studium
+Stránka **Studium** je studijní pomocník navržený tak, aby ses neztratila v povinnostech. Více studií vedle sebe (bakalářské, navazující, jiné).
+- **Přehled** ukazuje nahoře jedinou věc, která je teď na řadě (**Hotovo**, **Soustředit se** ve Stickies, **Posunout termín**). Pod ní je na řadě pár dalších věcí, týdenní pás s termíny a výukou, cesta ke státnicím (kredity, průměr), kolik věcí jsi splnila za 7 dní, nejbližší odznak a předměty tohoto semestru. Nový uživatel dostane krátkého průvodce nastavením.
+- **Termíny**: rychlé přidání jednou řádkou (text, předmět, termín jedním klepnutím, Enter), skupiny Dnes, Tento týden, Čeká na dořešení (klidná barva, žádná červená), Později, Bez termínu a Splněné. Každá skupina ukazuje jen pár položek, zbytek je za tlačítkem. Každá akce jde vrátit tlačítkem **Zpět**.
+- **Předměty**: kompaktní seznam, který se po klepnutí rozbalí na podmínky. Filtr semestru a statutu, **Vložit víc najednou** (jeden předmět na řádek, zkratka a kredity jsou volitelné). Splněné předměty jsou sbalené.
+- **Zápisy** z přednášek a cvičení, **Práce** (závěrečná práce: etapy, kapitoly, konzultace) a **Plán a odznaky** (bloky plánu ze STAGu, kredity po ročnících, etapy, odznaky).
+- Každý uživatel má **vlastní studia**, jsou součástí jeho souboru `data/<jméno>.json` (klíč `studies`) a synchronizují se stejně jako úkoly. Nový uživatel začíná s prázdnou stránkou a tlačítkem **Přidat studium**.
+- **Záloha a import**: *Nastavení a záloha* stáhne nebo zkopíruje všechna studia, a načte je zpět (i z jiného profilu).
+- **Úkoly ze studia**: u studia (Upravit údaje o studiu) vybereš seznam, tedy kategorii Stickies. Podmínky předmětů a úkoly závěrečné práce se tam objeví jako lístky (výchozí jsou jen ty s termínem, jde zvolit všechny nesplněné). Odškrtnutí platí na obou místech. Změna názvu nebo termínu ve Studiu přepíše lístek, úpravy lístku se nevracejí, smazaný lístek se znovu nevytvoří. Splněný předmět a smazaná podmínka uklidí nesplněné lístky.
+- **Gamifikace Studia:** značka s čepicí putuje po klikaté cestě k diplomu (Bc./Mgr./Ph.D.) podle získaných kreditů, vlajky na 25/50/75 %, úrovně, týdenní výzva a odznaky.
+- Studium se zobrazuje v rámečku (`studium.html`, `studium.js`, `studium.css`). Slučuje se po studiích: při souběžné úpravě stejného studia na dvou zařízeních vyhrává novější uložení.
+- Pozor: **známky a kredity jsou v datovém repozitáři** stejně jako úkoly. Platí vše z části o bezpečnosti výše.
+
 ## 5. Co v aplikaci pomáhá s ADHD (a proč)
 | Potíž | Co aplikace dělá |
 |---|---|
@@ -113,5 +126,10 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | `index.html`, `style.css`, `app.js` | Aplikace |
 | `plan.js` | Výpočet doporučení na dnes |
 | `stats.js` | Statistiky a odhad energie |
+| `studium.html`, `studium.js`, `studium.css` | Stránka Studium (studia, předměty, deadliny, zápisy, závěrečná práce) |
 | `users.js` | Seznam uživatelů a tokenů (vyplňuje správce) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline režim a instalace na mobil |
+
+
+### Gamifikace v celé aplikaci
+V postranním panelu je nenápadné tlačítko s úrovní (🌱 Semínko až ♾️ Nekonečno, 30 jmen). Po rozkliknutí se otevře okno s postupem XP, denními misemi a sbírkou **500 odznaků** (úkoly, náročnost, dny a týdny, denní doba, dny v týdnu, měsíce, svátky, rutiny, Studium, kroky, úrovně a další). XP se dopočítává z hotových úkolů (lehký 10, střední 20, náročný 40), takže se samo synchronizuje a nic se neukládá navíc. Při novém odznaku nebo úrovni se objeví konfety. Žádné série a nic se neodebírá.
