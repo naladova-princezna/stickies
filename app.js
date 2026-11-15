@@ -572,148 +572,46 @@
 
 
   /* =====================================================================
-     Gamifikace: vše se dopočítává z hotových úkolů (žádná extra data, synchronizuje se samo)
+     Tisk (do tiskárny nebo do PDF): úkoly ze všech kategorií
      ===================================================================== */
-  const XP_EFF = { light: 10, medium: 20, hard: 40 };
-  const LEVELS = [
-    ["🌱", "Semínko"], ["🌿", "Výhonek"], ["🍀", "Čtyřlístek"], ["🌼", "Kvítek"], ["🦋", "Motýlek"],
-    ["🌳", "Stromek"], ["🦊", "Liška"], ["🚀", "Raketa"], ["🌟", "Hvězda"], ["👑", "Královna"],
-    ["🎯", "Cíl"], ["🧩", "Puzzle"], ["🎨", "Paleta"], ["🪁", "Papírový drak"], ["🦉", "Sova"],
-    ["🐬", "Delfín"], ["🌊", "Vlna"], ["🏔️", "Vrcholek"], ["🌙", "Měsíc"], ["☀️", "Slunce"],
-    ["🌈", "Duha"], ["🔮", "Křišťál"], ["🪐", "Planeta"], ["🌌", "Galaxie"], ["🪄", "Kouzlo"],
-    ["🏰", "Hrad"], ["🗝️", "Klíč"], ["🛡️", "Štít"], ["🐲", "Drak"], ["♾️", "Nekonečno"],
-  ];
-  const lvlStart = (l) => 50 * l * (l - 1);
-  const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV", "XXV"];
-  const DAYN = ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota", "Neděle"];
-  const DAYL = ["v pondělí", "v úterý", "ve středu", "ve čtvrtek", "v pátek", "v sobotu", "v neděli"];
-  const MONN = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"];
-  const MONL = ["v lednu", "v únoru", "v březnu", "v dubnu", "v květnu", "v červnu", "v červenci", "v srpnu", "v září", "v říjnu", "v listopadu", "v prosinci"];
-  const SPECIAL = [
-    ["1.1", "🎆", "Nový rok", "na Nový rok"], ["14.2", "💌", "Valentýn", "na Valentýna"], ["29.2", "🐸", "Přestupný den", "29. února"],
-    ["8.3", "🌷", "Březnová růže", "8. března"], ["1.5", "🌸", "Prvomájová", "1. května"], ["1.6", "🎠", "Dětský den", "1. června"],
-    ["31.10", "🎃", "Dýně", "na Halloween"], ["28.10", "🇨🇿", "Státní svátek", "28. října"], ["17.11", "🕯️", "Den studentů", "17. listopadu"],
-    ["5.12", "😇", "Mikulášská", "na Mikuláše"], ["24.12", "🎄", "Štědrý den", "na Štědrý den"], ["31.12", "🥂", "Silvestr", "na Silvestra"],
-  ];
-  const BADGES = [];
-  /** family(id, emoji, název, popis s {n}, metrika, hranice) – každá hranice je jeden odznak */
-  function family(id, e, name, desc, key, steps) {
-    steps.forEach((n, i) => BADGES.push({ id: `${id}_${n}`, e, n: steps.length > 1 ? `${name} ${ROMAN[i] || i + 1}` : name, d: desc.replace("{n}", n), ok: (g) => key(g) >= n }));
+  function printNode(root) {
+    const old = document.getElementById("print-root"); if (old) old.remove();
+    root.id = "print-root";
+    document.body.append(root);
+    const cleanup = () => { root.remove(); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 80);
   }
-  const T50 = [1, 5, 10, 25, 50, 100, 200, 300];
-  family("t", "🎈", "Splněno", "{n} splněných úkolů celkem", (g) => g.total, [1, 5, 10, 15, 25, 40, 50, 75, 100, 150, 200, 250, 300, 400, 500, 600, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000]);
-  family("h", "🏔️", "Náročné", "{n} náročných úkolů", (g) => g.hard, [1, 3, 5, 10, 15, 25, 40, 50, 75, 100, 150, 200, 300, 500]);
-  family("m", "🧱", "Střední krok", "{n} středních úkolů", (g) => g.medium, [1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750]);
-  family("l", "🪶", "Lehká ruka", "{n} lehkých úkolů", (g) => g.light, [1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750]);
-  family("bd", "⚡", "Rozjezd", "{n} úkolů za jeden den", (g) => g.best, [2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20]);
-  family("ad", "📅", "Aktivní dny", "Aktivní alespoň {n} různých dní", (g) => g.days, [1, 3, 5, 7, 10, 14, 20, 30, 45, 60, 90, 120, 150, 200, 250, 300, 365, 400, 500, 730, 1000]);
-  family("d3", "🌤️", "Dobrý den", "{n} dní se 3 a více splněnými úkoly", (g) => g.d3, [1, 3, 5, 10, 20, 30, 50, 75, 100, 150, 200, 300, 365]);
-  family("d5", "☀️", "Skvělý den", "{n} dní s 5 a více splněnými úkoly", (g) => g.d5, [1, 3, 5, 10, 20, 50]);
-  family("dh", "🦁", "Odvážný den", "{n} dní s náročným úkolem", (g) => g.dh, [1, 5, 10, 25, 50, 100, 200]);
-  family("hd", "🔥", "Náročná dávka", "{n} náročných úkolů za jeden den", (g) => g.hardDay, [2, 3, 4, 5]);
-  family("wk", "🗓️", "Aktivní týdny", "Aktivní alespoň {n} různých týdnů", (g) => g.weeks, [1, 2, 4, 8, 12, 20, 26, 40, 52, 78, 104]);
-  family("bw", "🌊", "Pracovní týden", "{n} úkolů za jeden týden", (g) => g.bestWeek, [5, 10, 15, 20, 30, 50, 75, 100]);
-  family("bm", "🌕", "Pracovní měsíc", "{n} úkolů za jeden měsíc", (g) => g.bestMonth, [10, 25, 50, 100, 150, 200, 300, 500]);
-  family("ro", "🔁", "Rutina", "{n} splněných úkolů z rutin", (g) => g.routine, [1, 5, 10, 25, 50, 100, 200, 300, 500, 750, 1000]);
-  family("st", "🎓", "Studentka", "{n} splněných úkolů ze Studia", (g) => g.study, [1, 3, 5, 10, 20, 30, 50, 75, 100, 150, 200]);
-  family("ct", "🧭", "Všestranná", "Splněné úkoly v {n} různých seznamech", (g) => g.cats, [2, 3, 4, 5, 6, 8, 10, 12, 15]);
-  family("sp", "🪜", "Po krůčcích", "{n} splněných kroků v úkolech", (g) => g.steps, [1, 10, 25, 50, 100, 250, 500, 1000]);
-  family("cb", "🤗", "Vítej zpět", "{n}× ses vrátila po aspoň týdenní pauze. Žádné výčitky, jen radost", (g) => g.back, [1, 2, 3, 5, 10]);
-  family("mo", "🌅", "Ranní ptáče", "{n} úkolů splněných před 9:00", (g) => g.hrs.slice(0, 9).reduce((a, b) => a + b, 0), [1, 5, 10, 25, 50, 100, 200]);
-  family("nn", "🌞", "Poledne", "{n} úkolů splněných mezi 11:00 a 14:00", (g) => g.hrs.slice(11, 14).reduce((a, b) => a + b, 0), [1, 10, 25, 50, 100]);
-  family("ev", "🌆", "Podvečer", "{n} úkolů splněných mezi 17:00 a 22:00", (g) => g.hrs.slice(17, 22).reduce((a, b) => a + b, 0), [1, 5, 10, 25, 50, 100, 200]);
-  family("ni", "🦉", "Noční sova", "{n} úkolů splněných po 22:00 nebo před 5:00", (g) => g.hrs.slice(22).reduce((a, b) => a + b, 0) + g.hrs.slice(0, 5).reduce((a, b) => a + b, 0), [1, 5, 10, 25, 50, 100, 200]);
-  family("we", "🏖️", "Víkendová", "{n} úkolů splněných o víkendu", (g) => g.wd[5] + g.wd[6], [1, 5, 10, 25, 50, 100, 200, 300]);
-  family("wd", "💼", "Všední den", "{n} úkolů splněných ve všední den", (g) => g.total - g.wd[5] - g.wd[6], [1, 10, 25, 50, 100, 250, 500]);
-  DAYN.forEach((dn, i) => family("w" + i, ["🌑", "🔥", "🐪", "🍀", "🥳", "🎡", "🌻"][i], dn, `{n} úkolů splněných ${DAYL[i]}`, (g) => g.wd[i], T50));
-  MONN.forEach((mn, i) => family("o" + i, ["❄️", "🕊️", "🌱", "🐣", "🌺", "🍓", "🏖️", "🌾", "🍂", "🍁", "🌫️", "⛄"][i], mn, `{n} úkolů splněných ${MONL[i]}`, (g) => g.mo[i], [1, 5, 10, 25, 50, 100]));
-  for (let h24 = 0; h24 < 24; h24++) family("x" + h24, h24 < 6 ? "🌙" : h24 < 12 ? "🌄" : h24 < 18 ? "☀️" : "🌠", `V ${h24} hodin`, `{n} úkolů splněných mezi ${h24}:00 a ${h24}:59`, (g) => g.hrs[h24], [1, 10, 50]);
-  SPECIAL.forEach(([k, e, n, w]) => family("s" + k.replace(".", "_"), e, n, `Splň úkol ${w}`, (g) => g.sp[k] || 0, [1]));
-  family("lv", "🎖️", "Úroveň", "Dosáhni úrovně {n}", (g) => g.level, Array.from({ length: 29 }, (_, i) => i + 2));
-  family("xp", "✨", "Zásoba XP", "{n} XP celkem", (g) => g.xp, [100, 250, 500, 1000, 1500, 2500, 4000, 6000, 8000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000, 150000, 200000, 300000]);
-  BADGES.push({ id: "all3", e: "🌈", n: "Duhový den", d: "Lehký, střední i náročný úkol v jednom dni", ok: (g) => g.all3 });
-  BADGES.push({ id: "clr", e: "🧹", n: "Čistý stůl", d: "Splň vše, co sis na dnes naplánovala", ok: (g) => g.cleared });
-  const BADGE_TOTAL = BADGES.length;
-
-  let gameCache = { key: "", val: null };
-  function gameStats() {
-    const key = `${version}|${dayKey()}`;
-    if (gameCache.key === key) return gameCache.val;
-    let xp = 0, total = 0, hard = 0, medium = 0, light = 0, routine = 0, study = 0, today = 0, steps = 0;
-    const perDay = {}, perHard = {}, perWeek = {}, perMonth = {}, cats = new Set(), effDay = {};
-    const hrs = Array(24).fill(0), wd = Array(7).fill(0), mo = Array(12).fill(0), sp = {};
-    const weekKey = (d) => { const t = new Date(d); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7)); const y = t.getFullYear(); return y + "-" + Math.floor((t - new Date(y, 0, 1)) / 6048e5); };
-    for (const t of liveTasks()) {
-      steps += (t.steps || []).filter((x) => x.done).length;
-      if (t.status !== "done" || !t.done_at) continue;
-      const d = new Date(t.done_at), k = dayKey(d);
-      total++; xp += XP_EFF[t.effort] || 20;
-      if (t.effort === "hard") { hard++; perHard[k] = (perHard[k] || 0) + 1; } else if (t.effort === "light") light++; else medium++;
-      (effDay[k] = effDay[k] || new Set()).add(t.effort);
-      if (t.routine_id) routine++;
-      if (t.link) study++;
-      cats.add(t.category_id);
-      perDay[k] = (perDay[k] || 0) + 1;
-      const wk = weekKey(d), mk = d.getFullYear() + "-" + d.getMonth();
-      perWeek[wk] = (perWeek[wk] || 0) + 1; perMonth[mk] = (perMonth[mk] || 0) + 1;
-      hrs[d.getHours()]++; wd[(d.getDay() + 6) % 7]++; mo[d.getMonth()]++;
-      const sk = d.getDate() + "." + (d.getMonth() + 1); sp[sk] = (sp[sk] || 0) + 1;
-      if (k === dayKey()) today++;
-    }
-    let level = 1; while (xp >= lvlStart(level + 1)) level++;
-    const a = lvlStart(level), b = lvlStart(level + 1), dayKeys = Object.keys(perDay).sort();
-    let back = 0;
-    for (let i = 1; i < dayKeys.length; i++) if ((new Date(dayKeys[i]) - new Date(dayKeys[i - 1])) / 864e5 >= 7) back++;
-    const cnt = (n) => Object.values(perDay).filter((v) => v >= n).length;
-    const li = LEVELS[Math.min(level, LEVELS.length) - 1];
-    const g = {
-      xp, total, hard, medium, light, routine, study, today, level, steps, hrs, wd, mo, sp, back,
-      into: xp - a, span: b - a, pct: Math.round(((xp - a) / (b - a)) * 100), icon: li[0], title: li[1],
-      best: Math.max(0, ...Object.values(perDay)), days: dayKeys.length, cats: cats.size,
-      d3: cnt(3), d5: cnt(5), dh: Object.keys(perHard).length, hardDay: Math.max(0, ...Object.values(perHard)),
-      weeks: Object.keys(perWeek).length, bestWeek: Math.max(0, ...Object.values(perWeek)), bestMonth: Math.max(0, ...Object.values(perMonth)),
-      all3: Object.values(effDay).some((x) => x.size >= 3),
-      cleared: today >= 1 && todayOpen().length === 0,
+  function printTasks(withDone, withSteps) {
+    const tasks = liveTasks(), cats = liveCats();
+    const root = h("div");
+    const stamp = new Date().toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
+    root.append(h("h1", null, "Úkoly"), h("p", { class: "pr-sub" }, `Vytištěno ${stamp}`));
+    let count = 0;
+    const box = (on) => h("span", { class: "pr-box" + (on ? " pr-on" : ""), "aria-hidden": "true" });
+    const row = (t) => {
+      const done = t.status === "done";
+      const meta = [done ? "hotovo" : t.status === "today" ? "dnes" : null, EFFORT_LABEL[t.effort]].filter(Boolean).join(" · ");
+      const li = h("li", { class: done ? "pr-done" : "" },
+        h("div", { class: "pr-line" }, box(done), h("span", { class: "pr-text" }, t.text), h("span", { class: "pr-meta" }, meta)));
+      if (withSteps && t.steps.length) {
+        li.append(h("ul", { class: "pr-steps" }, ...t.steps.map((s) => h("li", { class: s.done ? "pr-done" : "" },
+          h("div", { class: "pr-line" }, box(s.done), h("span", { class: "pr-text" }, s.text))))));
+      }
+      count++;
+      return li;
     };
-    g.badges = new Set(BADGES.filter((x) => x.ok(g)).map((x) => x.id));
-    gameCache = { key, val: g };
-    return g;
+    for (const c of cats) {
+      const mine = tasks.filter((t) => t.category_id === c.id);
+      const open = mine.filter((t) => t.status !== "done")
+        .sort((x, y) => (x.status === "today" ? 0 : 1) - (y.status === "today" ? 0 : 1) || byPos(x, y));
+      const done = withDone ? mine.filter((t) => t.status === "done").sort((x, y) => new Date(y.done_at || 0) - new Date(x.done_at || 0)) : [];
+      if (!open.length && !done.length) continue;
+      root.append(h("section", { class: "pr-sec" }, h("h2", null, c.name), h("ul", { class: "pr-list" }, ...open.map(row), ...done.map(row))));
+    }
+    if (!count) { toast("Není co tisknout."); return; }
+    printNode(root);
   }
-  /** Nenápadné tlačítko v postranním panelu */
-  function renderGameBtn() {
-    const g = gameStats(), b = $("open-game");
-    b.replaceChildren(h("span", { class: "gb-e", "aria-hidden": "true" }, g.icon), h("span", { class: "gb-t" }, `Úroveň ${g.level} · ${g.title}`),
-      h("span", { class: "gb-bar", "aria-hidden": "true" }, h("i", { style: `width:${g.pct}%` })));
-    b.setAttribute("aria-label", `Úroveň ${g.level}, ${g.title}. Otevřít odznaky`);
-  }
-  let gameFilter = "all";
-  function renderGameDialog() {
-    const g = gameStats();
-    $("game-head").replaceChildren(
-      h("div", { class: "g-av", "aria-hidden": "true" }, g.icon),
-      h("div", { class: "g-who" },
-        h("p", { class: "eyebrow" }, "Úroveň " + g.level),
-        h("h2", { id: "game-title" }, g.title),
-        h("div", { class: "g-bar", role: "img", "aria-label": `${g.into} z ${g.span} XP do další úrovně` }, h("i", { style: `width:${g.pct}%` })),
-        h("p", { class: "muted g-xp" }, `${g.into} / ${g.span} XP do další úrovně · celkem ${g.xp} XP`)));
-    const quests = [
-      { t: "Splň 1 úkol", n: Math.min(1, g.today), of: 1 }, { t: "Splň 3 úkoly", n: Math.min(3, g.today), of: 3 },
-      { t: "Zvládni něco náročného", n: Math.min(1, liveTasks().filter((t) => t.status === "done" && t.effort === "hard" && isToday(t.done_at)).length), of: 1 },
-    ];
-    $("game-quests").replaceChildren(...quests.map((q) => h("li", { class: q.n >= q.of ? "done" : "" }, h("span", { class: "g-ck", "aria-hidden": "true" }, q.n >= q.of ? "✓" : ""), h("span", {}, q.t))));
-    $("game-count").textContent = `${g.badges.size} / ${BADGE_TOTAL}`;
-    for (const x of $("game-filter").children) x.setAttribute("aria-pressed", String(x.dataset.f === gameFilter));
-    const list = BADGES.filter((b) => gameFilter === "all" || (gameFilter === "got") === g.badges.has(b.id))
-      .sort((a, b) => Number(g.badges.has(b.id)) < Number(g.badges.has(a.id)) ? -1 : Number(g.badges.has(b.id)) > Number(g.badges.has(a.id)) ? 1 : 0);
-    $("game-grid").replaceChildren(...list.map((b) => {
-      const on = g.badges.has(b.id);
-      return h("button", { type: "button", class: "g-badge" + (on ? " on" : ""), title: b.d, "data-bd": `${on ? "Získáno: " : "Zamčeno: "}${b.n}. ${b.d}` },
-        h("span", { class: "g-bi", "aria-hidden": "true" }, on ? b.e : "🔒"), h("b", {}, b.n));
-    }));
-    $("game-detail").textContent = "Klepni na odznak pro popis.";
-    $("game-foot").textContent = "Lehký úkol dává 10 XP, střední 20 a náročný 40. Nic se neodebírá a žádné série se neztrácejí.";
-  }
-  function openGame() { renderGameDialog(); $("game-dialog").showModal(); }
 
   const act = {
     complete(id, src) {
@@ -721,12 +619,8 @@
       const open = todayOpen();
       const last = open.length === 1 && open[0].id === id;
       const msg = last ? "Dnešek je splněný. Teď si můžeš odpočinout." : PRAISE[doneToday().length % PRAISE.length];
-      const g0 = gameStats();
       commit((s) => { const t = s.tasks.find((x) => x.id === id); t.status = "done"; t.done_at = nowIso(); }, msg);
-      const g1 = gameStats();
-      const up = g1.level > g0.level, fresh = BADGES.filter((b) => g1.badges.has(b.id) && !g0.badges.has(b.id)), nb = fresh[0];
-      $("toast-msg").textContent = up ? `Nová úroveň: ${g1.icon} ${g1.title}!` : nb ? `Nový odznak: ${nb.e} ${nb.n}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ""}` : `${msg} +${g1.xp - g0.xp} XP`;
-      celebrate(rect, last || up || Boolean(nb));
+      celebrate(rect, last);
     },
     reopen(id) {
       commit((s) => {
@@ -877,6 +771,8 @@
     focus: (id) => { if (taskById(id)) openFocus(id); },
     toToday: (id) => { if (taskById(id)) act.toToday(id); },
     getCategories: () => liveCats().map((c) => ({ id: c.id, name: c.name })),
+    /** Tisk z rámečku Studium: dostane hotové HTML (už ošetřené) a vytiskne ho z hlavní stránky. */
+    print: (html) => { const r = h("div"); r.innerHTML = html; printNode(r); },
     setActive: (id) => store.set(K.study, id),
     /** Doplnění výchozích polí při načtení není změna dat. */
     mark: (list) => { for (const x of list) studyMark.set(x, studyStr(x)); },
@@ -979,7 +875,6 @@
     pendingFocus = null;
 
     renderSide();
-    renderGameBtn();
     $("view-today").hidden = ROUTE.name !== "dnes";
     $("view-backlog").hidden = ROUTE.name !== "zasobnik";
     $("view-cat").hidden = ROUTE.name !== "kat";
@@ -2153,10 +2048,9 @@
       $(id).addEventListener("change", () => { prefs[key] = $(id).checked; savePrefs(); });
     }
   }
-  $("open-game").addEventListener("click", () => { closeSide(); openGame(); });
-  $("game-filter").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) { gameFilter = b.dataset.f; renderGameDialog(); } });
-  $("game-grid").addEventListener("click", (e) => { const b = e.target.closest("[data-bd]"); if (b) $("game-detail").textContent = b.dataset.bd; });
   $("open-prefs").addEventListener("click", () => { closeSide(); $("prefs-dialog").showModal(); });
+  $("open-print").addEventListener("click", () => { closeSide(); $("print-dialog").showModal(); });
+  $("print-go").addEventListener("click", () => { const d = $("print-done").checked, s = $("print-steps").checked; $("print-dialog").close(); printTasks(d, s); });
 
   /* =====================================================================
      Soustředění: jeden úkol, viditelný čas

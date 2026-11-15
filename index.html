@@ -50,6 +50,7 @@
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5Z"/><path d="M4 21.5V5.5"/><path d="M9 8h7M9 12h5"/></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="9" rx="2"/><path d="M7 14h10v7H7z"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20Z"/><path d="M12 10v5M12 18h.01"/></symbol>
   </svg>
 
@@ -102,7 +103,7 @@
         <button id="sync" class="sync warn" type="button" aria-haspopup="dialog">
           <span class="dot-s"></span><span id="sync-text">Jen v tomto zařízení</span>
         </button>
-        <button id="open-game" class="foot-btn gbtn" type="button" aria-haspopup="dialog"></button>
+        <button id="open-print" class="foot-btn" type="button" aria-haspopup="dialog"><svg class="i"><use href="#i-print"/></svg>Vytisknout úkoly</button>
         <button id="open-prefs" class="foot-btn" type="button" aria-haspopup="dialog"><svg class="i"><use href="#i-gear"/></svg>Pohodlí a vzhled</button>
         <button id="side-logout" class="foot-btn" type="button" hidden><svg class="i"><use href="#i-logout"/></svg><span id="side-logout-t">Odhlásit se</span></button>
       </div>
@@ -495,18 +496,17 @@
     </div>
   </dialog>
 
-  <dialog id="game-dialog" aria-labelledby="game-title">
-    <div class="st-block" style="gap:16px">
-      <div class="dlg-head"><span class="eyebrow">Tvůj postup</span>
+  <dialog id="print-dialog" aria-labelledby="print-title">
+    <div class="st-block" style="gap:18px">
+      <div class="dlg-head"><h2 id="print-title">Vytisknout úkoly</h2>
         <button type="button" class="icon-btn" data-close aria-label="Zavřít"><svg class="i"><use href="#i-x"/></svg></button></div>
-      <div id="game-head" class="g-top"></div>
-      <ul id="game-quests" class="g-quests"></ul>
-      <div class="dlg-head"><h3>Sbírka odznaků <span id="game-count" class="count"></span></h3>
-        <div id="game-filter" class="g-filter" role="group" aria-label="Filtr odznaků">
-          <button type="button" data-f="all" aria-pressed="true">Vše</button><button type="button" data-f="got" aria-pressed="false">Získané</button><button type="button" data-f="todo" aria-pressed="false">Zamčené</button></div></div>
-      <div id="game-grid" class="g-grid"></div>
-      <p id="game-detail" class="g-detail" aria-live="polite"></p>
-      <p id="game-foot" class="muted g-foot"></p>
+      <p class="muted">Vytiskne seznam úkolů ze všech kategorií, po kategoriích. Úkoly označené na dnes jsou v každé kategorii nahoře. V okně tisku můžeš zvolit i uložení do PDF.</p>
+      <label class="switch"><input type="checkbox" id="print-steps" checked><span class="sw"></span><span class="sw-t"><strong>Kroky u úkolů</strong><small>Rozepsané kroky se vypíšou pod úkolem.</small></span></label>
+      <label class="switch"><input type="checkbox" id="print-done"><span class="sw"></span><span class="sw-t"><strong>Včetně hotových úkolů</strong><small>Hotové jsou na konci každé kategorie, přeškrtnuté.</small></span></label>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Zrušit</button>
+        <button type="button" id="print-go" class="btn btn-primary">Vytisknout</button>
+      </div>
     </div>
   </dialog>
 

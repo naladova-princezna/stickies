@@ -58,6 +58,7 @@ Pak *Commit changes*. Za minutu je to na webu.
 - **Dnes**: dnešní priority (nahoře karta **Teď**), hotovo dnes a **Stav dne**.
 - **Zásobník**: všechny kategorie vedle sebe, **Vyber za mě**, v každé kategorii nejvýš 6 lístků a tlačítko pro zbytek.
 - **Rutiny**: opakující se seznamy úkolů (viz níže).
+- **Vytisknout úkoly** (tlačítko ve spodu postranního panelu): vytiskne úkoly ze všech kategorií po kategoriích. Volitelně s kroky a s hotovými úkoly. V okně tisku jde zvolit uložení do PDF.
 - **Přehled**: historie energie a vytížení, statistiky a odhad (viz níže).
 - **Kategorie** v boční liště (na mobilu tlačítko *Kategorie*): vlastní stránka. Klávesa **N** otevře přidání úkolu.
 - **Lístky jsou barevné podle kategorie**, i ty hotové (tlumeněji, s barevným pruhem).
@@ -93,14 +94,14 @@ Jak odhad vzniká (kód je v `stats.js`, testy na umělých datech ověřují, �
 
 ### Studium
 Stránka **Studium** je studijní pomocník navržený tak, aby ses neztratila v povinnostech. Více studií vedle sebe (bakalářské, navazující, jiné).
-- **Přehled** ukazuje nahoře jedinou věc, která je teď na řadě (**Hotovo**, **Soustředit se** ve Stickies, **Posunout termín**). Pod ní je na řadě pár dalších věcí, týdenní pás s termíny a výukou, cesta ke státnicím (kredity, průměr), kolik věcí jsi splnila za 7 dní, nejbližší odznak a předměty tohoto semestru. Nový uživatel dostane krátkého průvodce nastavením.
+- **Přehled** ukazuje nahoře jedinou věc, která je teď na řadě (**Hotovo**, **Soustředit se** ve Stickies, **Posunout termín**). Pod ní je na řadě pár dalších věcí, týdenní pás s termíny a výukou, postup ke státnicím (kredity, průměr), kolik věcí jsi splnila za 7 dní a předměty tohoto semestru. Nový uživatel dostane krátkého průvodce nastavením.
 - **Termíny**: rychlé přidání jednou řádkou (text, předmět, termín jedním klepnutím, Enter), skupiny Dnes, Tento týden, Čeká na dořešení (klidná barva, žádná červená), Později, Bez termínu a Splněné. Každá skupina ukazuje jen pár položek, zbytek je za tlačítkem. Každá akce jde vrátit tlačítkem **Zpět**.
 - **Předměty**: kompaktní seznam, který se po klepnutí rozbalí na podmínky. Filtr semestru a statutu, **Vložit víc najednou** (jeden předmět na řádek, zkratka a kredity jsou volitelné). Splněné předměty jsou sbalené.
-- **Zápisy** z přednášek a cvičení, **Práce** (závěrečná práce: etapy, kapitoly, konzultace) a **Plán a odznaky** (bloky plánu ze STAGu, kredity po ročnících, etapy, odznaky).
+- **Zápisy** z přednášek a cvičení, **Práce** (závěrečná práce: etapy, kapitoly, konzultace).
 - Každý uživatel má **vlastní studia**, jsou součástí jeho souboru `data/<jméno>.json` (klíč `studies`) a synchronizují se stejně jako úkoly. Nový uživatel začíná s prázdnou stránkou a tlačítkem **Přidat studium**.
+- **Tisk předmětů**: na stránce **Předměty** tlačítko *Vytisknout* vytiskne všechny předměty po semestrech: kód, název, kredity, statut, způsob ukončení a výsledek s datem. V okně tisku jde zvolit uložení do PDF.
 - **Záloha a import**: *Nastavení a záloha* stáhne nebo zkopíruje všechna studia, a načte je zpět (i z jiného profilu).
 - **Úkoly ze studia**: u studia (Upravit údaje o studiu) vybereš seznam, tedy kategorii Stickies. Podmínky předmětů a úkoly závěrečné práce se tam objeví jako lístky (výchozí jsou jen ty s termínem, jde zvolit všechny nesplněné). Odškrtnutí platí na obou místech. Změna názvu nebo termínu ve Studiu přepíše lístek, úpravy lístku se nevracejí, smazaný lístek se znovu nevytvoří. Splněný předmět a smazaná podmínka uklidí nesplněné lístky.
-- **Gamifikace Studia:** značka s čepicí putuje po klikaté cestě k diplomu (Bc./Mgr./Ph.D.) podle získaných kreditů, vlajky na 25/50/75 %, úrovně, týdenní výzva a odznaky.
 - Studium se zobrazuje v rámečku (`studium.html`, `studium.js`, `studium.css`). Slučuje se po studiích: při souběžné úpravě stejného studia na dvou zařízeních vyhrává novější uložení.
 - Pozor: **známky a kredity jsou v datovém repozitáři** stejně jako úkoly. Platí vše z části o bezpečnosti výše.
 
@@ -131,5 +132,3 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline režim a instalace na mobil |
 
 
-### Gamifikace v celé aplikaci
-V postranním panelu je nenápadné tlačítko s úrovní (🌱 Semínko až ♾️ Nekonečno, 30 jmen). Po rozkliknutí se otevře okno s postupem XP, denními misemi a sbírkou **500 odznaků** (úkoly, náročnost, dny a týdny, denní doba, dny v týdnu, měsíce, svátky, rutiny, Studium, kroky, úrovně a další). XP se dopočítává z hotových úkolů (lehký 10, střední 20, náročný 40), takže se samo synchronizuje a nic se neukládá navíc. Při novém odznaku nebo úrovni se objeví konfety. Žádné série a nic se neodebírá.
