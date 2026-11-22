@@ -946,3 +946,52 @@ select.lane-sel.lane-wait { --lc: #6fb7c9; color: var(--muted); }
 /* Přihlášení: vedlejší akce */
 .login-alt { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .login-alt .btn { flex: 1 1 auto; }
+
+/* ---------- Zásobník: klidné lístky (priority bez barevného šumu) ---------- */
+.cat-col .note.is-backlog {
+  --ink: var(--text); --fg: var(--text); --fg2: var(--muted); --soft: rgba(255, 255, 255, .08);
+  padding: 10px 8px 6px 4px; border-radius: 14px; background: var(--surface);
+  border: 1px solid var(--line); border-left: 4px solid var(--a); box-shadow: none;
+}
+.cat-col .note.is-backlog:hover { transform: none; background: rgba(255, 255, 255, .07); border-color: var(--line-2); border-left-color: var(--a); box-shadow: none; }
+.cat-col .note.is-backlog .check { color: var(--a); width: 40px; height: 40px; }
+.cat-col .note.is-backlog .check .i { width: 22px; height: 22px; }
+.cat-col .note.is-backlog .note-main { padding-top: 6px; }
+.cat-col .note.is-backlog .note-text { font-weight: 600; font-size: 15px; line-height: 1.4; }
+.cat-col .note.is-backlog .note-foot { margin-top: 2px; min-height: 0; gap: 6px 10px; }
+.cat-col .note.is-backlog .chip { background: none; padding: 0; color: var(--muted); font-weight: 600; }
+.cat-col .note.is-backlog .chip::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--a); }
+.cat-col .note.is-backlog .eff { color: var(--muted); }
+.cat-col .note.is-backlog .chip-fit { padding: 2px 8px; background: rgba(31, 224, 184, .15); color: #a5f7e2; }
+.cat-col .note.is-backlog .chip-fit::before { display: none; }
+.cat-col .note.is-backlog.fits { outline: none; }
+.cat-col .note.is-backlog .tools { margin-left: 0; width: 100%; justify-content: flex-start; gap: 4px; }
+.cat-col .note.is-backlog .pill { height: 32px; padding: 0 12px; font-size: 13px; background: rgba(255, 255, 255, .08); color: var(--text); }
+.cat-col .note.is-backlog .pill-sm { height: 28px; padding: 0 10px; font-size: 12px; background: none; color: var(--muted); border: 1px solid var(--line-2); }
+.cat-col .note.is-backlog .icon-btn { color: var(--muted); }
+.cat-col .note.is-backlog .icon-btn:hover { color: var(--text); background: rgba(255, 255, 255, .08); }
+.cat-col .note.is-backlog .flag { margin-top: 2px; min-height: 30px; width: auto; padding: 0 4px; border: 0; background: none; color: var(--muted); font-weight: 600; font-size: 12px; }
+.cat-col .note.is-backlog .flag:hover { color: var(--text); filter: none; }
+.cat-col .note.is-backlog select.lane-sel { height: 30px; min-height: 30px; max-width: 128px; font-size: 12px; padding-left: 10px; }
+/* Ovládání se ukáže až při najetí/zaměření (na dotyku zůstává vždy, ale tlumené) */
+@media (hover: hover) and (pointer: fine) and (min-width: 861px) {
+  .cat-col .note.is-backlog .tools { position: absolute; right: 6px; top: 6px; width: auto; padding: 2px; border-radius: 12px; background: var(--bg-2, #14122b); border: 1px solid var(--line-2); opacity: 0; pointer-events: none; transition: opacity .12s; }
+  .cat-col .note.is-backlog:hover .tools, .cat-col .note.is-backlog:focus-within .tools { opacity: 1; pointer-events: auto; }
+}
+.note .pill { white-space: nowrap; }
+.seg-switch { max-width: 100%; }
+@media (max-width: 560px) {
+  .page-head { flex-wrap: wrap; }
+  .page-head .seg-switch { width: 100%; }
+  .page-head .seg-btn { flex: 1; padding: 0 8px; }
+}
+.cat-col .note.is-backlog .note-main { min-width: 0; }
+.cat-col .note.is-backlog .tools { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
+@media (max-width: 860px) {
+  .cat-col .note.is-backlog .tools { gap: 2px 4px; }
+  .cat-col .note.is-backlog .icon-btn { width: 38px; height: 38px; }
+  .cat-col .note.is-backlog select.lane-sel { max-width: 104px; padding-right: 22px; }
+  .cat-col .note.is-backlog .tools .pill { padding: 0 10px; }
+  .cat-col .note.is-backlog .note-foot .pill-sm { height: 26px; }
+}
+@media (max-width: 860px) { .cat-col.lane .note.is-backlog select.lane-sel { display: none; } }
