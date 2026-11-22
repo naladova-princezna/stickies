@@ -387,3 +387,17 @@ html[data-calm="1"] .btn.primary{box-shadow:none}
   #print-root tr { break-inside: avoid; }
   #print-root .pr-sum { font-weight: 700; margin: 0 0 14pt; }
 }
+
+/* Sbalitelné bloky přehledu */
+.fold-head{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.fold-head b{font-size:16px}
+.fold-head .muted{margin-left:auto;font-size:13px}
+.fold-head .chev{transition:transform .15s;font-size:20px;color:var(--muted)}
+.fold.open .fold-head .chev{transform:rotate(90deg)}
+.fold-head:not(:has(.muted)) .chev{margin-left:auto}
+.fold-body{margin-top:10px}
+.fold-body .card{border:0;padding:0;background:none;backdrop-filter:none}
+.fold-body .head-row h3{display:none}
+.card:not(.fold) > .fold-head{margin-top:6px;min-height:40px;border-top:1px solid var(--line);padding-top:8px;font-size:14px}
+.card:not(.fold) > .fold-head b{font-size:14px;color:var(--muted);font-weight:700}
+.card > .tiles{margin-top:10px}
