@@ -1217,9 +1217,7 @@
     if (!t) return;
     if (t.status === "backlog") commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Na dnes: ${t.text}`);
     $("start-dialog").close();
-    openFocus(t.id);
-    setFocusDur(5);
-    startTimer();
+    if (location.hash !== "#/dnes") location.hash = "#/dnes";
   }
 
   $("start-go").addEventListener("click", startStarter);
