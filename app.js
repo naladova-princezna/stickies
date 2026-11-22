@@ -1015,9 +1015,10 @@
     const pct = total ? Math.round((done.length / total) * 100) : 0;
     $("ring-fg").style.strokeDashoffset = String(175.93 * (1 - pct / 100));
     $("ring-pct").textContent = total ? pct + " %" : "";
-    $("progress-text").textContent = !total ? "Zatím nemáš nic naplánováno."
+    $("progress-text").textContent = !total ? "Čistý stůl. Přidej první věc, nebo ti pomůžu začít."
       : open.length === 0 ? "Všechno hotovo. Dobrá práce."
-      : `Hotovo ${done.length} z ${total}.`;
+      : done.length === 0 ? (open.length === 1 ? "Dnes máš jednu věc. Stačí začít." : `Dnes máš ${open.length} ${plural(open.length, "věc", "věci", "věcí")}. Stačí začít jednou.`)
+      : `Hotovo ${done.length} z ${total}. Jde ti to.`;
     $("count-today").textContent = open.length;
     $("count-done").textContent = done.length;
 
