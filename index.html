@@ -181,6 +181,7 @@
             <p id="energy-brief" class="energy-brief" hidden></p>
             <div id="energy-body">
             <p id="energy-zone-desc" class="muted zone-desc"></p>
+            <div id="cycle-hint" class="cycle-hint" hidden></div>
             <div class="sliders">
               <div class="slider">
                 <div class="slider-top"><label for="energy-range">Energie</label><output id="energy-val" for="energy-range">60 %</output></div>
@@ -526,9 +527,11 @@
     <div class="st-block" style="gap:18px">
       <div class="dlg-head"><h2 id="prefs-title">Pohodlí a vzhled</h2>
         <button type="button" class="icon-btn" data-close aria-label="Zavřít"><svg class="i"><use href="#i-x"/></svg></button></div>
-      <p class="muted">Nastavení platí jen v tomto zařízení.</p>
+      <p class="muted">Velikost textu, barvy, animace a zvuk platí jen v tomto zařízení. Cyklus se ukládá do účtu.</p>
       <fieldset class="field"><legend>Velikost textu</legend>
         <div id="pref-fs" class="seg-wrap" role="radiogroup"></div></fieldset>
+      <label class="switch"><input type="checkbox" id="pref-cycle"><span class="sw"></span><span class="sw-t"><strong>Počítat s menstruačním cyklem</strong><small>Ukáže fáze cyklu a započítá je do odhadů. Platí pro celý účet na všech zařízeních.</small></span></label>
+      <label class="switch" id="pref-care-row" hidden><input type="checkbox" id="pref-care"><span class="sw"></span><span class="sw-t"><strong>Šetřit kapacitu v citlivých fázích</strong><small>Doporučení pro den bude o pětinu mírnější. Platí pro celý účet.</small></span></label>
       <label class="switch"><input type="checkbox" id="pref-calm"><span class="sw"></span><span class="sw-t"><strong>Klidnější barvy</strong><small>Tlumí sytost lístků, když je jich moc na oči.</small></span></label>
       <label class="switch"><input type="checkbox" id="pref-still"><span class="sw"></span><span class="sw-t"><strong>Bez animací</strong><small>Žádné konfety ani pohyb. Respektuje i nastavení systému.</small></span></label>
       <label class="switch"><input type="checkbox" id="pref-sound"><span class="sw"></span><span class="sw-t"><strong>Zvuk na konci časovače</strong><small>Krátké pípnutí, když soustředění skončí.</small></span></label>
@@ -544,6 +547,7 @@
 
   <script src="cloud.js"></script>
   <script src="plan.js"></script>
+  <script src="cycle.js"></script>
   <script src="stats.js"></script>
   <script src="app.js"></script>
 </body>

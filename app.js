@@ -74,6 +74,9 @@
     del(k) { try { localStorage.removeItem(k); } catch { /* nic */ } },
   };
 
+  /** Nastavení tohoto zařízení (velikost textu, animace, zvuk). */
+  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true }, store.get(K.pref, {}));
+
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -186,6 +189,13 @@
     return o;
   }
 
+  /** Nastavení vázané na účet: záznam {id, on}. Synchronizuje se jako ostatní data. */
+  function nSetting(x) {
+    const o = { id: String(x.id), on: x.on === true, updated_at: x.updated_at || nowIso() };
+    if (x.deleted) o.deleted = true;
+    return o;
+  }
+
   function normalize(raw) {
     const r = raw && typeof raw === "object" ? raw : {};
     const cats = (Array.isArray(r.categories) ? r.categories : []).filter((x) => x && x.id).map(nCat);
@@ -196,7 +206,8 @@
     const legacy = nDayRec(r.day);                       // starší verze ukládaly jen dnešek
     if (legacy && legacy.set && !map.has(legacy.id)) map.set(legacy.id, legacy);
     const studies = (Array.isArray(r.studies) ? r.studies : []).filter((x) => x && x.id).map(nStudy);
-    return { categories: cats, tasks, routines, days: [...map.values()], studies };
+    const settings = (Array.isArray(r.settings) ? r.settings : []).filter((x) => x && x.id).map(nSetting);
+    return { categories: cats, tasks, routines, days: [...map.values()], studies, settings };
   }
 
   const canon = (s) => stable({
@@ -205,6 +216,7 @@
     r: [...(s.routines || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     d: [...(s.days || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     s: [...(s.studies || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    g: [...(s.settings || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
   });
 
   function pickNewer(x, y) {
@@ -229,6 +241,7 @@
     const routines = mergeLists(a.routines || [], b.routines || []);
     const days = mergeLists(a.days || [], b.days || []);
     const studies = mergeLists(a.studies || [], b.studies || []);
+    const settings = mergeLists(a.settings || [], b.settings || []);
     const alive = new Set(cats.filter((c) => !c.deleted).map((c) => c.id));
     const now = nowIso();
     for (const r of routines) {
@@ -239,14 +252,14 @@
     }
     const limit = Date.now() - TOMBSTONE_DAYS * 864e5;
     const fresh = (x) => !(x.deleted && (Date.parse(x.updated_at) || 0) < limit);
-    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh) };
+    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh), settings };
   }
 
   /** Změněným záznamům nastaví updated_at. */
   function touch(prev, next) {
     const now = nowIso();
     const strip = (o) => { const c = { ...o }; delete c.updated_at; return stable(c); };
-    for (const key of ["categories", "tasks", "routines", "days", "studies"]) {
+    for (const key of ["categories", "tasks", "routines", "days", "studies", "settings"]) {
       const pm = new Map((prev[key] || []).map((x) => [x.id, strip(x)]));
       for (const x of next[key] || []) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
     }
@@ -255,7 +268,7 @@
   /* =====================================================================
      Stav, uložení
      ===================================================================== */
-  let state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
+  let state = { categories: [], tasks: [], routines: [], days: [], studies: [], settings: [] };
   let meta = { sha: null, dirty: false };
   let gh = null;                    // {repo, token, path, branch}
   let version = 0;                  // počítadlo lokálních změn
@@ -405,7 +418,7 @@
           if (snapVer === version) meta.dirty = false;
           settled = true;
         } else {
-          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [] }, remote ? remote.sha : null);
+          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [], settings: merged.settings || [] }, remote ? remote.sha : null);
           if (res.conflict) continue;
           meta.sha = res.sha;
           if (snapVer === version) meta.dirty = false;
@@ -928,6 +941,7 @@
       h("i"), h("i"), h("i"), h("span", { class: "sr-only" }, EFFORT_LABEL[t.effort])));
     if (mode === "today" && !done) {
       foot.append(h("span", { class: "chip chip-time", title: t.est ? "Odhad času" : "Odhad podle náročnosti" }, icon("clock"), (t.est ? "" : "~") + fmtDur(estOf(t))));
+      foot.append(h("span", { class: "chip chip-time", title: "Body: kolik sil úkol stojí (lehký 1, střední 2, náročný 4)" }, `${pointsOf(t)} b`));
     }
     if (!done && (t.steps.length || !flag || open)) {
       foot.append(h("button", {
@@ -954,7 +968,6 @@
       tools.append(h("button", { class: "pill", type: "button", "data-k": "today:" + t.id, "aria-label": `Přesunout na dnes: ${t.text}`, on: { click: (e) => { e.stopPropagation(); act.toToday(t.id); } } }, "Na dnes", icon("arrow-right")));
     }
     if (mode === "today") {
-      tools.append(iconBtn("play", "Soustředit se na tenhle úkol", () => openFocus(t.id), "focus:" + t.id));
       tools.append(iconBtn("undo", "Vrátit do zásobníku", () => act.toBacklog(t.id), "back:" + t.id));
     }
     if (!done) tools.append(iconBtn("edit", "Upravit", () => openEdit(t.id), "edit:" + t.id));
@@ -965,10 +978,6 @@
     if (flag && !open) {
       main.append(h("button", { class: "flag", type: "button", "data-k": "flag:" + t.id, on: { click: (e) => { e.stopPropagation(); openSteps(t.id); } } },
         icon("sparkle"), h("span", null, "Náročný úkol: rozepiš ho na kroky")));
-    }
-    if (o.now && mode === "today") {
-      main.append(h("button", { class: "btn-now", type: "button", "data-k": "start:" + t.id, on: { click: (e) => { e.stopPropagation(); openFocus(t.id); } } },
-        icon("play"), "Začít soustředění"));
     }
 
     el.append(check, main);
@@ -1067,21 +1076,51 @@
   const dayRec = (date) => liveDays().find((d) => d.date === date) || null;
   const round5 = (v) => Math.round(v / 5) * 5;
 
+  /* ---------- Body úkolů a fáze cyklu ---------- */
+  const pointsOf = (t) => Plan.cost(t.effort);
+
+  /** Splněné body a úkoly po dnech: { "YYYY-MM-DD": n }. */
+  function doneByDay() {
+    const points = {}, tasks = {};
+    for (const t of liveTasks()) {
+      if (t.status !== "done" || !t.done_at) continue;
+      const k = dayKey(new Date(t.done_at));
+      points[k] = (points[k] || 0) + pointsOf(t);
+      tasks[k] = (tasks[k] || 0) + 1;
+    }
+    return { points, tasks };
+  }
+
+  /** Menstruační cyklus se ukazuje a počítá jen u žen. Bez volby se zapne jen tam, kde už jsou označené začátky. */
+  const markedStarts = () => liveDays().filter((d) => d.cycle_start).map((d) => d.date);
+  const settingRec = (id) => (state.settings || []).find((x) => x.id === id && !x.deleted);
+  const settingOn = (id, fallback = false) => { const r = settingRec(id); return r ? r.on : fallback; };
+  function setSetting(id, on) {
+    commit((st) => {
+      st.settings = st.settings || [];
+      const cur = st.settings.find((x) => x.id === id);
+      if (cur) { cur.on = on; delete cur.deleted; } else st.settings.push({ id, on, updated_at: nowIso() });
+    });
+  }
+  const cycleOn = () => settingOn("cycle", markedStarts().length > 0);
+  const cycleAnchors = () => (cycleOn() ? markedStarts() : []);
+  const cycleNow = () => (cycleOn() ? Cycle.phaseOf(dayKey(), cycleAnchors()) : null);
+  const careEnabled = () => cycleOn() && settingOn("care");
+  /** Šetření kapacity jen když ho zapneš a ten den je citlivá fáze. */
+  function recOpts(date = dayKey()) {
+    if (!careEnabled()) return undefined;
+    const c = Cycle.phaseOf(date, cycleAnchors());
+    return c && !c.stale && c.sensitive ? { factor: Plan.CFG.careFactor } : undefined;
+  }
+
   /** Statistika se počítá jen když se data změnila (cache podle počítadla změn). */
   let statsCache = { key: "", val: null };
   function stats() {
     const key = `${version}|${dayKey()}`;
     if (statsCache.key === key) return statsCache.val;
     const rows = liveDays().filter((d) => d.set).map((d) => ({ date: d.date, energy: d.energy, load: d.load }));
-    const points = {}, tasks = {};
-    for (const t of liveTasks()) {
-      if (t.status !== "done" || !t.done_at) continue;
-      const k = dayKey(new Date(t.done_at));
-      points[k] = (points[k] || 0) + (Plan.CFG.cost[t.effort] || 2);
-      tasks[k] = (tasks[k] || 0) + 1;
-    }
-    const anchors = liveDays().filter((d) => d.cycle_start).map((d) => d.date);
-    const val = Stats.analyze(rows, { today: dayKey(), points, tasks, anchors });
+    const { points, tasks } = doneByDay();
+    const val = Stats.analyze(rows, { today: dayKey(), points, tasks, anchors: cycleAnchors() });
     statsCache = { key, val };
     return val;
   }
@@ -1099,7 +1138,7 @@
 
   function computeEval() {
     const v = dayValues();
-    const rec = Plan.recommend(v.energy, v.load);
+    const rec = Plan.recommend(v.energy, v.load, recOpts());
     return { rec, ev: Plan.evaluate(rec, [...todayOpen(), ...doneToday()]) };
   }
 
@@ -1135,9 +1174,30 @@
     paintEnergy(+er.value, +lr.value, open, done);
   }
 
+  /** Řádek o fázi cyklu ve Stavu dne. Ukáže se jen když sis označila začátek cyklu. */
+  function paintCycleHint() {
+    const box = $("cycle-hint"), c = cycleNow();
+    if (!c) { box.hidden = true; box.replaceChildren(); return; }
+    box.hidden = false;
+    if (c.stale) {
+      box.replaceChildren(h("p", { class: "muted" }, "Poslední označený začátek cyklu je už starý. Až začne nový, označ ho v ", h("a", { href: "#/prehled", class: "inline-link" }, "Přehledu"), "."));
+      return;
+    }
+    const kids = [h("div", { class: "cycle-line" },
+      h("span", { class: `chip chip-cycle${c.sensitive ? " is-sens" : ""}` }, `${c.day}. den · ${c.phase.label}${c.predicted ? " (odhad)" : ""}`))];
+    if (c.sensitive) {
+      kids.push(h("p", { class: "cycle-tip" }, c.phase.tips[0]));
+      kids.push(h("button", { type: "button", class: "btn btn-sm", "aria-pressed": String(careEnabled()),
+        on: { click: () => { setSetting("care", !careEnabled()); } } },
+        careEnabled() ? "Šetřím kapacitu o 20 %. Vypnout" : "Šetřit kapacitu o 20 %"));
+    }
+    box.replaceChildren(...kids);
+  }
+
   function paintEnergy(energy, load, open = todayOpen(), done = doneToday()) {
-    const rec = Plan.recommend(energy, load);
+    const rec = Plan.recommend(energy, load, recOpts());
     const ev = Plan.evaluate(rec, [...open, ...done]);
+    paintCycleHint();
 
     $("energy-val").textContent = rec.energy + " %";
     $("load-val").textContent = rec.load + " %";
@@ -1861,9 +1921,97 @@
     return h("section", { class: "panel stat-panel" }, h("header", { class: "panel-head" }, h("h2", null, title)), ...kids);
   }
 
+  const statOpen = {};
+  /** Cyklus se otevře sám jen v citlivé fázi, jinak je sbalený. Ruční volba má přednost. */
+  const statDefault = (id) => { const c = id === "cyklus" ? cycleNow() : null; return Boolean(c && !c.stale && c.sensitive); };
+  function foldPanel(id, title, sum, ...kids) {
+    const open = statOpen[id] === undefined ? statDefault(id) : statOpen[id];
+    return h("section", { class: "panel stat-panel sfold" + (open ? " open" : "") },
+      h("button", { type: "button", class: "sfold-head", "aria-expanded": String(open), on: { click: () => { statOpen[id] = !open; renderStats(); } } },
+        h("h2", null, title), sum ? h("span", { class: "muted" }, sum) : null, icon("chevron")),
+      open ? h("div", { class: "sfold-body" }, ...kids) : null);
+  }
+
+  /** Dnes: body, energie a fáze cyklu na jednom místě. */
+  function nowPanel() {
+    const v = dayValues(), rec = Plan.recommend(v.energy, v.load, recOpts());
+    const earned = doneByDay().points[dayKey()] || 0, c = cycleNow();
+    const pct = rec.points ? Math.min(100, Math.round((earned / rec.points) * 100)) : (earned ? 100 : 0);
+    const tile = (big, small) => h("div", { class: "nt" }, h("b", null, big), h("span", null, small));
+    return h("section", { class: "panel stat-panel" },
+      h("header", { class: "panel-head" }, h("h2", null, "Dnes")),
+      h("div", { class: "nt-grid" },
+        h("div", { class: "nt nt-wide" }, h("b", null, `${earned} z ${rec.points} b`), h("span", null, "body splněné z dnešní kapacity"),
+          h("div", { class: "meter" }, h("div", { class: "meter-bar", role: "img", "aria-label": `${earned} z ${rec.points} bodů` }, h("span", { style: `width:${pct}%` })))),
+        tile(`${v.energy} %`, v.set ? "energie" : "energie (odhad)"),
+        tile(`${v.load} %`, v.set ? "vytížení" : "vytížení (odhad)"),
+        c && !c.stale ? tile(`${c.day}. den`, c.phase.label) : null),
+      h("p", { class: "muted small" }, "Body říkají, kolik sil úkol stojí: lehký 1, střední 2, náročný 4. Kapacita dne roste s energií a klesá s vytížením. Víc není lepší, plánuj na zhruba 70 % kapacity."));
+  }
+
+  /** Posledních 7 dní: splněné body proti kapacitě toho dne. Žádné série a žádné trestání. */
+  function weekPanel() {
+    const { points, tasks } = doneByDay(), n0 = Stats.dn(dayKey()), days = [];
+    for (let i = 6; i >= 0; i--) {
+      const k = Stats.ds(n0 - i), r = dayRec(k);
+      days.push({ k, wd: Stats.WD[Stats.wdOf(Stats.dn(k))], pts: points[k] || 0, n: tasks[k] || 0, cap: r && r.set ? Plan.recommend(r.energy, r.load, recOpts(k)).points : null, today: i === 0 });
+    }
+    const max = Math.max(8, ...days.map((d) => Math.max(d.pts, d.cap || 0)));
+    const sum = days.reduce((a, d) => a + d.pts, 0), cnt = days.reduce((a, d) => a + d.n, 0), active = days.filter((d) => d.n > 0).length;
+    return h("section", { class: "panel stat-panel" },
+      h("header", { class: "panel-head" }, h("h2", null, "Posledních 7 dní"), h("span", { class: "muted small" }, `${sum} b · ${cnt} ${plural(cnt, "úkol", "úkoly", "úkolů")}`)),
+      h("div", { class: "wp" }, days.map((d) => h("div", { class: "wp-col" + (d.today ? " is-today" : ""),
+        role: "img", "aria-label": `${d.wd}: ${d.pts} bodů, ${d.n} ${plural(d.n, "úkol", "úkoly", "úkolů")}${d.cap != null ? `, kapacita ${d.cap} bodů` : ""}` },
+        h("div", { class: "wp-bar" },
+          d.cap != null ? h("i", { class: "wp-cap", style: `bottom:${(d.cap / max) * 100}%` }) : null,
+          h("span", { style: `height:${(d.pts / max) * 100}%` })),
+        h("b", null, d.pts || "·"), h("small", null, d.wd)))),
+      h("p", { class: "muted small" }, active
+        ? `Aspoň jeden úkol sis splnila ${active} ze 7 dní. Čárka značí kapacitu dne, když jsi ten den zadala energii.`
+        : "Zatím tu nic není. Jakmile odškrtneš první úkol, objeví se tady."));
+  }
+
+  const PH_COLOR = { menstrual: "#ff7a9c", follicular: "#5cc8ff", ovulation: "#ffc861", luteal: "#a79dff", premenstrual: "#ff9f5a" };
+
+  /** Cyklus a fáze: z tebou označených začátků, s poznámkami z přehledu studií. */
+  function cyclePanel(st) {
+    const anchors = cycleAnchors(), c = cycleNow(), marks = anchors.slice().sort(), todayStr = dayKey(), kids = [];
+    if (!anchors.length) {
+      kids.push(h("p", null, "Volitelné. Studie popisují, že u části žen s ADHD kolísá pozornost, plánování a nálada podle fáze cyklu. Když si označíš začátky cyklu, ukážu ti, v jaké fázi jsi a co v ní obvykle pomáhá. Stačí označit začátek 1×, přesnější je to po 2 označeních."));
+    } else if (c && c.stale) {
+      kids.push(h("p", null, "Poslední označený začátek je starý. Až začne nový cyklus, označ ho tlačítkem níž."));
+    } else if (c) {
+      const L = c.length, segs = [];
+      for (let d = 1; d <= L; d++) {
+        const id = Cycle.phaseByDay(d, L).id, last = segs[segs.length - 1];
+        if (last && last.id === id) last.n++; else segs.push({ id, n: 1 });
+      }
+      const pos = ((Math.min(c.day, L) - 0.5) / L) * 100;
+      kids.push(h("p", null, h("b", null, `${c.day}. den · ${c.phase.label}`), c.predicted ? " (odhad podle obvyklé délky cyklu)" : ""));
+      kids.push(h("div", { class: "ph-strip", role: "img", "aria-label": `Cyklus má ${L} dní. Dnes je ${c.day}. den, ${c.phase.label}.` },
+        ...segs.map((g) => h("span", { style: `flex:${g.n};background:${PH_COLOR[g.id]}` })), h("i", { class: "ph-now", style: `left:${pos}%` })));
+      kids.push(h("div", { class: "ph-legend" }, Cycle.ORDER.map((id) => h("span", null, h("i", { style: `background:${PH_COLOR[id]}` }), Cycle.PHASES[id].label))));
+      kids.push(h("p", { class: "cycle-note" }, c.phase.note));
+      kids.push(h("ul", { class: "tips" }, c.phase.tips.map((t) => h("li", null, t))));
+      const bp = Cycle.byPhase(st.rows, anchors, doneByDay().points);
+      kids.push(h("h3", { class: "sub-h" }, "Tvoje čísla podle fáze"));
+      kids.push(bp.length
+        ? h("div", { class: "bands" }, Cycle.ORDER.map((id) => bp.find((x) => x.id === id)).filter(Boolean).map((b) => h("div", { class: "band" },
+            h("b", null, Cycle.PHASES[b.id].label), h("span", null, `energie ${b.energy} %, vytížení ${b.load} %, ${b.points} b denně`), h("small", null, `z ${b.days} ${plural(b.days, "dne", "dnů", "dnů")}`))))
+        : h("p", { class: "muted small" }, "Zatím málo dnů. Každá fáze potřebuje aspoň 3 zadané dny. Tvoje vlastní čísla jsou důležitější než obecné studie."));
+    }
+    kids.push(h("div", { class: "cycle-tools" },
+      h("button", { type: "button", class: "btn btn-sm", id: "cycle-mark", on: { click: toggleCycleToday } }, dayRec(todayStr) && dayRec(todayStr).cycle_start ? "Zrušit označení dneška" : "Dnes začíná nový cyklus"),
+      h("span", { class: "muted small" }, marks.length ? `Označené začátky: ${marks.slice(-4).map(fmtDM).join(", ")}${marks.length > 4 ? "…" : ""}` : "")));
+    kids.push(h("p", { class: "muted small" }, "Zdroj: Wynchank a kol., Journal of Clinical Medicine 2025 (přehled 29 studií). U žen s ADHD jsou důkazy zatím omezené, takže jde o obecný trend, ne o jistotu. Je to odhad podle kalendáře, ne měření a ne zdravotní pomůcka. Když se zhoršení opakuje a je silné (nálada, spánek, únava), stojí za to ho probrat s lékařem nebo lékařkou."));
+    return kids;
+  }
+
   function renderStats() {
     const st = stats(), box = $("stats-body"), parts = [];
     const todayStr = dayKey();
+    const cNow = cycleNow();
+    parts.push(nowPanel(), weekPanel(), ...(cycleOn() ? [foldPanel("cyklus", "Cyklus a fáze", cNow ? (cNow.stale ? "označ nový začátek" : `${cNow.day}. den · ${cNow.phase.label}`) : "volitelné", ...cyclePanel(st))] : []));
 
     if (st.n < Stats.CFG.minRows) {
       parts.push(statPanel("Zatím sbírám data",
@@ -1879,7 +2027,7 @@
           h("div", { class: "fc-row" }, h("span", null, lbl), h("b", null, p.v + " %")),
           h("div", { class: "fc-bar", "aria-hidden": "true" }, h("span", { class: "fc-range", style: `left:${p.lo}%;width:${Math.max(2, p.hi - p.lo)}%` }), h("i", { style: `left:${p.v}%` })),
           h("small", null, `${p.lo}–${p.hi} %`)))));
-      parts.push(statPanel("Odhad na dnes a dalších 6 dní",
+      parts.push(foldPanel("odhad", "Odhad na 7 dní", st.forecast.length ? `dnes energie kolem ${st.forecast[0].energy.v} %` : "", 
         h("p", { class: "conf conf-" + st.confidence }, CONF[st.confidence]),
         h("div", { class: "fc-grid" }, cards),
         h("p", { class: "muted small" }, "Z tvých zadaných dnů. Světlý pruh je pravděpodobné rozmezí. Ve Stavu dne je podle odhadu předvyplněno, ale rozhoduješ vždy ty.")));
@@ -1887,14 +2035,14 @@
 
     // graf
     if (st.n) {
-      parts.push(statPanel("Posledních 30 dní",
+      parts.push(foldPanel("graf", "Posledních 30 dní", "energie a vytížení", 
         h("div", { class: "legend" }, h("span", null, h("i", { class: "lg lg-e" }), "Energie"), h("span", null, h("i", { class: "lg lg-l" }), "Vytížení"), st.forecast.length ? h("span", { class: "muted" }, "tečkovaně: odhad") : null),
         lineChart(st)));
     }
 
     // týdenní rytmus
     if (st.n >= Stats.CFG.weekdayRows) {
-      parts.push(statPanel("Týdenní rytmus",
+      parts.push(foldPanel("rytmus", "Týdenní rytmus", "průměr podle dne v týdnu", 
         h("p", { class: "muted small" }, "Průměr podle dne v týdnu."),
         h("div", { class: "wk" }, st.weekday.map((w) => h("div", { class: "wk-col" },
           h("div", { class: "wk-bars", role: "img", "aria-label": `${w.label}: energie ${w.energy ?? "?"} %, vytížení ${w.load ?? "?"} %, zadáno ${w.count} dní` },
@@ -1904,7 +2052,7 @@
 
     // cyklus
     const cyBody = [];
-    const marks = liveDays().filter((d) => d.cycle_start).map((d) => d.date).sort();
+    const marks = markedStarts().sort();
     if (st.cycle) {
       const cy = st.cycle, lvl = { high: "vyšší než obvykle", mid: "průměrná", low: "nižší než obvykle" }[cy.level];
       cyBody.push(h("p", null, cy.kind === "anchors"
@@ -1917,14 +2065,11 @@
     } else {
       cyBody.push(h("p", { class: "muted" }, "V datech zatím nevidím zřetelné opakování. To je v pořádku: buď žádný pravidelný cyklus není, nebo je potřeba víc dní. Odhad se opírá jen o týdenní rytmus a poslední dny."));
     }
-    cyBody.push(h("div", { class: "cycle-tools" },
-      h("button", { type: "button", class: "btn btn-sm", id: "cycle-mark", on: { click: toggleCycleToday } }, dayRec(todayStr) && dayRec(todayStr).cycle_start ? "Zrušit označení dneška" : "Dnes začíná nový cyklus"),
-      h("span", { class: "muted small" }, marks.length ? `Označené začátky: ${marks.slice(-4).map(fmtDM).join(", ")}${marks.length > 4 ? "…" : ""}` : "Volitelné: když sleduješ nějaký svůj pravidelný cyklus, označ jeho začátek (stačí 2×) a odhad bude přesnější.")));
     cyBody.push(h("p", { class: "muted small" }, "Je to statistický odhad z tvých vlastních záznamů, ne měření a ne zdravotní pomůcka. Když ti nesedí, klidně ho ignoruj."));
-    parts.push(statPanel("Tvůj cyklus (experimentální)", ...cyBody));
+    parts.push(foldPanel("opakovani", "Opakování v energii (experimentální)", st.cycle ? `cyklus zhruba ${st.cycle.length} dní` : "", ...cyBody));
 
     // výkon podle energie
-    parts.push(statPanel("Kolik zvládneš při jaké energii",
+    parts.push(foldPanel("pasma", "Kolik zvládneš při jaké energii", st.bands.length ? `${st.bands.length} pásma` : "", 
       st.bands.length
         ? h("div", { class: "bands" }, st.bands.map((b) => h("div", { class: "band" },
             h("b", null, b.label), h("span", null, `${b.avgTasks} ${plural(Math.round(b.avgTasks), "úkol", "úkoly", "úkolů")} denně, ${b.avgPoints} b`), h("small", null, `z ${b.days} dní`))))
@@ -1934,10 +2079,10 @@
     // historie
     const hist = liveDays().filter((d) => d.set).sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 14);
     if (hist.length) {
-      parts.push(statPanel("Poslední záznamy",
+      parts.push(foldPanel("historie", "Poslední záznamy", `${hist.length} dní`, 
         h("ul", { class: "hist" }, hist.map((d) => h("li", null,
           h("span", { class: "hist-d" }, `${Stats.WD[Stats.wdOf(Stats.dn(d.date))]} ${fmtDM(d.date)}`),
-          h("span", null, `energie ${d.energy} %, vytížení ${d.load} %`), d.cycle_start ? h("span", { class: "chip" }, "začátek cyklu") : null,
+          h("span", null, `energie ${d.energy} %, vytížení ${d.load} %`), d.cycle_start && cycleOn() ? h("span", { class: "chip" }, "začátek cyklu") : null,
           h("button", { type: "button", class: "btn btn-sm btn-ghost", on: { click: () => openDayDialog(d.date) } }, "Upravit"))))));
     }
     box.replaceChildren(...parts);
@@ -1959,6 +2104,7 @@
     $("day-energy").value = r ? r.energy : 55;
     $("day-load").value = r ? r.load : 40;
     $("day-cycle").checked = Boolean(r && r.cycle_start);
+    $("day-cycle").closest("label").hidden = !cycleOn();
     $("day-delete").hidden = !r;
     $("day-error").textContent = "";
     paintDaySliders();
@@ -1984,11 +2130,11 @@
     e.preventDefault();
     const date = $("day-date").value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > dayKey()) { $("day-error").textContent = "Vyber den, který už nastal."; return; }
-    const energy = +$("day-energy").value, load = +$("day-load").value, cyc = $("day-cycle").checked;
+    const energy = +$("day-energy").value, load = +$("day-load").value, cyc = $("day-cycle").checked, touchCycle = cycleOn();
     commit((s) => {
       const cur = s.days.find((d) => d.date === date);
-      if (cur) { cur.energy = energy; cur.load = load; cur.set = true; delete cur.deleted; if (cyc) cur.cycle_start = true; else delete cur.cycle_start; }
-      else s.days.push(Object.assign({ id: date, date, energy, load, set: true, updated_at: nowIso() }, cyc ? { cycle_start: true } : {}));
+      if (cur) { cur.energy = energy; cur.load = load; cur.set = true; delete cur.deleted; if (touchCycle) { if (cyc) cur.cycle_start = true; else delete cur.cycle_start; } }
+      else s.days.push(Object.assign({ id: date, date, energy, load, set: true, updated_at: nowIso() }, touchCycle && cyc ? { cycle_start: true } : {}));
     }, `Uloženo: ${fmtDM(date)}.`);
     $("day-dialog").close();
   });
@@ -2072,7 +2218,6 @@
      Pohodlí a vzhled (nastavení tohoto zařízení)
      ===================================================================== */
   const FS_OPTIONS = [[1, "Normální"], [1.15, "Větší"], [1.3, "Největší"]];
-  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true }, store.get(K.pref, {}));
   const reduceMotion = () => prefs.still || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function applyPrefs() {
@@ -2082,7 +2227,10 @@
     r.dataset.still = prefs.still ? "1" : "0";
   }
   function savePrefs() { store.set(K.pref, prefs); applyPrefs(); syncStudyFrame(); }
+  function syncCareRow() { const r = $("pref-care-row"); if (r) r.hidden = !cycleOn(); $("pref-cycle").checked = cycleOn(); $("pref-care").checked = careEnabled(); }
   function buildPrefs() {
+    $("pref-cycle").addEventListener("change", () => { setSetting("cycle", $("pref-cycle").checked); if (!$("pref-cycle").checked) setSetting("care", false); syncCareRow(); });
+    $("pref-care").addEventListener("change", () => { setSetting("care", $("pref-care").checked); syncCareRow(); });
     $("pref-fs").replaceChildren(...FS_OPTIONS.map(([v, label]) => h("label", { class: "seg" },
       h("input", Object.assign({ type: "radio", name: "pref-fs", value: String(v) }, prefs.fs === v ? { checked: true } : {})),
       h("span", null, label))));
@@ -2092,7 +2240,7 @@
       $(id).addEventListener("change", () => { prefs[key] = $(id).checked; savePrefs(); });
     }
   }
-  $("open-prefs").addEventListener("click", () => { closeSide(); $("prefs-dialog").showModal(); });
+  $("open-prefs").addEventListener("click", () => { closeSide(); syncCareRow(); $("prefs-dialog").showModal(); });
   $("open-print").addEventListener("click", () => { closeSide(); $("print-dialog").showModal(); });
   $("print-go").addEventListener("click", () => { const d = $("print-done").checked, s = $("print-steps").checked; $("print-dialog").close(); printTasks(d, s); });
 
@@ -2377,7 +2525,7 @@
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
-      state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
+      state = { categories: [], tasks: [], routines: [], days: [], studies: [], settings: [] };
       seedDefaults();
     }
     if (reconcileStudyLinks()) { version++; meta.dirty = true; persist(); }

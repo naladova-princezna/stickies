@@ -51,6 +51,8 @@ V SQL Editoru ve Supabase: `insert into public.allowed_emails (email) values ('j
 ### Stav dne a doporučení
 Zadáš energii a vytížení dne (rychle přes předvolby nebo posuvníkem). Aplikace spočítá kapacitu v bodech (lehký 1, střední 2, náročný 4) a řekne, kolik úkolů a jakých dnes dává smysl, co se ještě vejde a kdy je plán přeplněný. V zásobníku označí lístky, které se k dnešku hodí. Je to pomůcka, ne diagnóza. Konstanty se dají upravit v `plan.js` (`CFG`).
 
+Volitelně lze v Přehledu označit začátky cyklu. Aplikace pak ukáže fázi (menstruace, folikulární, ovulace, luteální, předmenstruační dny), poznámky z přehledu studií (Wynchank a kol., J Clin Med 2025, u žen s ADHD zatím omezené důkazy) a umí na požádání o 20 % snížit kapacitu v citlivých fázích. Nic se nemění samo.
+
 ### Rutiny
 Stránka **Rutiny** v menu je pro seznamy úkolů, které se ti čas od času opakují (třeba úklid bytu).
 - **Nová rutina**: název, kategorie, jak často ti to má aplikace připomenout (ručně, týdně, po 2 týdnech, měsíčně…) a úkoly, každý na nový řádek. U prvního použití je tlačítko s hotovým příkladem *Úklid bytu*.
@@ -111,6 +113,7 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | `index.html`, `style.css`, `app.js` | Aplikace |
 | `plan.js` | Výpočet doporučení na dnes |
 | `stats.js` | Statistiky a odhad energie |
+| `cycle.js` | Fáze cyklu z označených začátků (volitelné), testy v `tests/cycle.test.js` |
 | `studium.html`, `studium.js`, `studium.css` | Stránka Studium (studia, předměty, deadliny, zápisy, závěrečná práce) |
 | `cloud.js` | Přihlášení a ukládání dat na Supabase |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline režim a instalace na mobil |
