@@ -34,7 +34,9 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
     <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
     <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 16v4M17 18h4"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7Z"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19.5 11 3.5 3.5 0 0 1 18 18Z"/></symbol>
@@ -198,6 +200,11 @@
             </div>
           </section>
 
+          <section class="panel timeline-panel" aria-labelledby="h-timeline">
+            <header class="panel-head"><h2 id="h-timeline">Plán dne</h2><span id="tl-sum" class="muted tl-sum"></span></header>
+            <ol id="tl-list" class="seq" aria-label="Pořadí úkolů na dnes"></ol>
+            <p class="muted hint">Jen pořadí, žádné hodiny. Šipkami úkoly seřadíš, klepnutím na odhad času ho změníš.</p>
+          </section>
           <div class="today-main">
             <section class="panel" aria-labelledby="h-today-list">
               <header class="panel-head"><h2 id="h-today-list">Dnešní priority</h2><span class="count" id="count-today">0</span></header>
@@ -324,6 +331,10 @@
         <div class="field">
           <label for="edit-lane">Skupina v zásobníku</label>
           <select id="edit-lane"></select>
+        </div>
+        <div class="field">
+          <label for="edit-est">Odhad času</label>
+          <select id="edit-est"></select>
         </div>
         <div class="field" id="edit-due-field" hidden>
           <label for="edit-due">Termín z předmětu</label>
