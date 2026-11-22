@@ -74,6 +74,9 @@
     del(k) { try { localStorage.removeItem(k); } catch { /* nic */ } },
   };
 
+  /** Nastavení tohoto zařízení. sex: "zena" | "muz" | "" (neuvedeno); care: šetřit kapacitu v citlivých fázích cyklu. */
+  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true, sex: "", care: false }, store.get(K.pref, {}));
+
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -1082,9 +1085,12 @@
     return { points, tasks };
   }
 
-  const cycleAnchors = () => liveDays().filter((d) => d.cycle_start).map((d) => d.date);
-  const cycleNow = () => Cycle.phaseOf(dayKey(), cycleAnchors());
-  const careEnabled = () => store.get("stickies:cyclecare", false) === true;
+  /** Menstruační cyklus se ukazuje a počítá jen u žen. Bez volby se zapne jen tam, kde už jsou označené začátky. */
+  const markedStarts = () => liveDays().filter((d) => d.cycle_start).map((d) => d.date);
+  const cycleOn = () => prefs.sex === "zena" || (prefs.sex === "" && markedStarts().length > 0);
+  const cycleAnchors = () => (cycleOn() ? markedStarts() : []);
+  const cycleNow = () => (cycleOn() ? Cycle.phaseOf(dayKey(), cycleAnchors()) : null);
+  const careEnabled = () => cycleOn() && prefs.care === true;
   /** Šetření kapacity jen když ho zapneš a ten den je citlivá fáze. */
   function recOpts(date = dayKey()) {
     if (!careEnabled()) return undefined;
@@ -1167,7 +1173,7 @@
     if (c.sensitive) {
       kids.push(h("p", { class: "cycle-tip" }, c.phase.tips[0]));
       kids.push(h("button", { type: "button", class: "btn btn-sm", "aria-pressed": String(careEnabled()),
-        on: { click: () => { store.set("stickies:cyclecare", !careEnabled()); render(); } } },
+        on: { click: () => { prefs.care = !careEnabled(); savePrefs(); render(); } } },
         careEnabled() ? "Šetřím kapacitu o 20 %. Vypnout" : "Šetřit kapacitu o 20 %"));
     }
     box.replaceChildren(...kids);
@@ -1990,7 +1996,7 @@
     const st = stats(), box = $("stats-body"), parts = [];
     const todayStr = dayKey();
     const cNow = cycleNow();
-    parts.push(nowPanel(), weekPanel(), foldPanel("cyklus", "Cyklus a fáze", cNow ? (cNow.stale ? "označ nový začátek" : `${cNow.day}. den · ${cNow.phase.label}`) : "volitelné", ...cyclePanel(st)));
+    parts.push(nowPanel(), weekPanel(), ...(prefs.sex === "zena" || cycleOn() ? [foldPanel("cyklus", "Cyklus a fáze", cNow ? (cNow.stale ? "označ nový začátek" : `${cNow.day}. den · ${cNow.phase.label}`) : "volitelné", ...cyclePanel(st))] : []));
 
     if (st.n < Stats.CFG.minRows) {
       parts.push(statPanel("Zatím sbírám data",
@@ -2031,7 +2037,7 @@
 
     // cyklus
     const cyBody = [];
-    const marks = liveDays().filter((d) => d.cycle_start).map((d) => d.date).sort();
+    const marks = markedStarts().sort();
     if (st.cycle) {
       const cy = st.cycle, lvl = { high: "vyšší než obvykle", mid: "průměrná", low: "nižší než obvykle" }[cy.level];
       cyBody.push(h("p", null, cy.kind === "anchors"
@@ -2061,7 +2067,7 @@
       parts.push(foldPanel("historie", "Poslední záznamy", `${hist.length} dní`, 
         h("ul", { class: "hist" }, hist.map((d) => h("li", null,
           h("span", { class: "hist-d" }, `${Stats.WD[Stats.wdOf(Stats.dn(d.date))]} ${fmtDM(d.date)}`),
-          h("span", null, `energie ${d.energy} %, vytížení ${d.load} %`), d.cycle_start ? h("span", { class: "chip" }, "začátek cyklu") : null,
+          h("span", null, `energie ${d.energy} %, vytížení ${d.load} %`), d.cycle_start && cycleOn() ? h("span", { class: "chip" }, "začátek cyklu") : null,
           h("button", { type: "button", class: "btn btn-sm btn-ghost", on: { click: () => openDayDialog(d.date) } }, "Upravit"))))));
     }
     box.replaceChildren(...parts);
@@ -2083,6 +2089,7 @@
     $("day-energy").value = r ? r.energy : 55;
     $("day-load").value = r ? r.load : 40;
     $("day-cycle").checked = Boolean(r && r.cycle_start);
+    $("day-cycle").closest("label").hidden = !cycleOn();
     $("day-delete").hidden = !r;
     $("day-error").textContent = "";
     paintDaySliders();
@@ -2108,11 +2115,11 @@
     e.preventDefault();
     const date = $("day-date").value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > dayKey()) { $("day-error").textContent = "Vyber den, který už nastal."; return; }
-    const energy = +$("day-energy").value, load = +$("day-load").value, cyc = $("day-cycle").checked;
+    const energy = +$("day-energy").value, load = +$("day-load").value, cyc = $("day-cycle").checked, touchCycle = cycleOn();
     commit((s) => {
       const cur = s.days.find((d) => d.date === date);
-      if (cur) { cur.energy = energy; cur.load = load; cur.set = true; delete cur.deleted; if (cyc) cur.cycle_start = true; else delete cur.cycle_start; }
-      else s.days.push(Object.assign({ id: date, date, energy, load, set: true, updated_at: nowIso() }, cyc ? { cycle_start: true } : {}));
+      if (cur) { cur.energy = energy; cur.load = load; cur.set = true; delete cur.deleted; if (touchCycle) { if (cyc) cur.cycle_start = true; else delete cur.cycle_start; } }
+      else s.days.push(Object.assign({ id: date, date, energy, load, set: true, updated_at: nowIso() }, touchCycle && cyc ? { cycle_start: true } : {}));
     }, `Uloženo: ${fmtDM(date)}.`);
     $("day-dialog").close();
   });
@@ -2196,7 +2203,6 @@
      Pohodlí a vzhled (nastavení tohoto zařízení)
      ===================================================================== */
   const FS_OPTIONS = [[1, "Normální"], [1.15, "Větší"], [1.3, "Největší"]];
-  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true }, store.get(K.pref, {}));
   const reduceMotion = () => prefs.still || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function applyPrefs() {
@@ -2206,7 +2212,15 @@
     r.dataset.still = prefs.still ? "1" : "0";
   }
   function savePrefs() { store.set(K.pref, prefs); applyPrefs(); syncStudyFrame(); }
+  function syncCareRow() { const r = $("pref-care-row"); if (r) r.hidden = prefs.sex !== "zena"; }
   function buildPrefs() {
+    $("pref-sex").replaceChildren(...[["zena", "Žena"], ["muz", "Muž"], ["", "Neuvádět"]].map(([v, label]) => h("label", { class: "seg" },
+      h("input", Object.assign({ type: "radio", name: "pref-sex", value: v }, prefs.sex === v ? { checked: true } : {})),
+      h("span", null, label))));
+    $("pref-sex").addEventListener("change", (e) => { prefs.sex = e.target.value; if (prefs.sex !== "zena") prefs.care = false; savePrefs(); syncCareRow(); $("pref-care").checked = prefs.care; render(); });
+    $("pref-care").checked = Boolean(prefs.care);
+    $("pref-care").addEventListener("change", () => { prefs.care = $("pref-care").checked; savePrefs(); render(); });
+    syncCareRow();
     $("pref-fs").replaceChildren(...FS_OPTIONS.map(([v, label]) => h("label", { class: "seg" },
       h("input", Object.assign({ type: "radio", name: "pref-fs", value: String(v) }, prefs.fs === v ? { checked: true } : {})),
       h("span", null, label))));
