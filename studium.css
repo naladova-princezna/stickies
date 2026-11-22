@@ -387,3 +387,43 @@ html[data-calm="1"] .btn.primary{box-shadow:none}
   #print-root tr { break-inside: avoid; }
   #print-root .pr-sum { font-weight: 700; margin: 0 0 14pt; }
 }
+
+/* Sbalitelné bloky přehledu */
+.fold-head{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.fold-head b{font-size:16px}
+.fold-head .muted{margin-left:auto;font-size:13px}
+.fold-head .chev{transition:transform .15s;font-size:20px;color:var(--muted)}
+.fold.open .fold-head .chev{transform:rotate(90deg)}
+.fold-head:not(:has(.muted)) .chev{margin-left:auto}
+.fold-body{margin-top:10px}
+.fold-body .card{border:0;padding:0;background:none;backdrop-filter:none}
+.fold-body .head-row h3{display:none}
+.card:not(.fold) > .fold-head{margin-top:6px;min-height:40px;border-top:1px solid var(--line);padding-top:8px;font-size:14px}
+.card:not(.fold) > .fold-head b{font-size:14px;color:var(--muted);font-weight:700}
+.card > .tiles{margin-top:10px}
+
+/* ---------- Příjemnější vzhled (shodný s hlavní aplikací) ---------- */
+main{gap:18px;padding-top:18px}
+.card{border-radius:22px;padding:22px;border-color:rgba(255,255,255,.09);box-shadow:0 18px 40px -28px rgba(0,0,0,.7);transition:border-color .2s,background .2s}
+.btn{border-radius:99px;padding:9px 18px;min-height:42px;transition:background .15s,border-color .15s,transform .1s}
+.btn:active{transform:scale(.97)}
+.btn.small{min-height:34px;padding:5px 14px}
+.btn.big{min-height:50px;padding:0 24px;font-size:16px;font-weight:700}
+.btn.primary:hover{filter:brightness(1.06)}
+.seg{border-radius:99px;padding:3px;gap:2px;background:rgba(255,255,255,.05)}
+.seg button{border-radius:99px}
+.seg button+button{border-left:0}
+.seg.studies button{padding:7px 16px}
+.card.now{background:linear-gradient(160deg,rgba(31,224,184,.13),rgba(124,108,255,.1));border-color:rgba(31,224,184,.3);padding:26px}
+.card.now h2{font-size:26px;line-height:1.25;margin:4px 0 10px}
+.card.now .lead{color:var(--ink);opacity:.8;margin:10px 0 18px}
+.card.now .eyebrow{letter-spacing:.08em}
+.bar{height:10px}
+.bar>i{background:linear-gradient(90deg,#7c6cff,var(--accent))}
+.tile{border-radius:16px;padding:14px 16px}
+.row{padding:13px 0}
+.row input[type=checkbox]{width:22px;height:22px;border-radius:7px}
+.fold-head:hover b{color:var(--accent)}
+.card.fold:hover{border-color:rgba(255,255,255,.18)}
+.minirow{padding:6px 0}
+@media (prefers-reduced-motion:reduce){.card,.btn,.bar>i{transition:none}.btn:active{transform:none}}

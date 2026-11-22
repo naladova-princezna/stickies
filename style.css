@@ -1059,3 +1059,12 @@ dialog.start { width: min(460px, 92vw); }
 .sfold-body { margin-top: 14px; }
 @media (max-width: 560px) { .nt-grid { grid-template-columns: 1fr 1fr; } .nt-wide { grid-column: 1 / -1; } .nt-grid .nt:nth-child(4) { grid-column: 1 / -1; } }
 @media (max-width: 560px) { .sfold-head h2 { flex: 1 1 auto; } .sfold-head .muted { order: 3; flex-basis: 100%; margin-left: 0; } .sfold-head > .i { order: 2; margin-left: auto; } .sfold-head:not(:has(.muted)) { flex-wrap: nowrap; } }
+
+/* ---------- Příjemnější dotek ---------- */
+.btn, .pill, .icon-btn, .seq-dur, .seq-check, .check { transition: transform .12s, filter .15s, background-color .15s; }
+.btn:active, .pill:active, .seq-dur:active { transform: scale(.97); }
+.icon-btn:active, .seq-check:active, .check:active { transform: scale(.9); }
+.seq-block { transition: transform .15s, box-shadow .15s; }
+.seq-block:hover { transform: translateY(-1px); box-shadow: 0 16px 28px -16px var(--b), inset 0 1px 0 rgba(255, 255, 255, .4); }
+.seq-dot { transition: background .2s, border-color .2s; }
+.start-first { transition: border-color .2s; }

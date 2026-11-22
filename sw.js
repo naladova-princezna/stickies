@@ -3,7 +3,7 @@
    Písma: z cache, na pozadí se obnovují.
    Požadavky na Supabase (jiný původ) se nezasahují. */
 
-const VERSION = "stickies-v19";
+const VERSION = "stickies-v25";
 const SHELL = [
   "./", "index.html", "style.css", "plan.js", "cycle.js", "stats.js", "cloud.js", "app.js", "studium.html", "studium.css", "studium.js", "manifest.webmanifest",
   "icons/favicon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
