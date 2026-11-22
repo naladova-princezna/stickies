@@ -968,7 +968,6 @@
       tools.append(h("button", { class: "pill", type: "button", "data-k": "today:" + t.id, "aria-label": `Přesunout na dnes: ${t.text}`, on: { click: (e) => { e.stopPropagation(); act.toToday(t.id); } } }, "Na dnes", icon("arrow-right")));
     }
     if (mode === "today") {
-      tools.append(iconBtn("play", "Soustředit se na tenhle úkol", () => openFocus(t.id), "focus:" + t.id));
       tools.append(iconBtn("undo", "Vrátit do zásobníku", () => act.toBacklog(t.id), "back:" + t.id));
     }
     if (!done) tools.append(iconBtn("edit", "Upravit", () => openEdit(t.id), "edit:" + t.id));
@@ -979,10 +978,6 @@
     if (flag && !open) {
       main.append(h("button", { class: "flag", type: "button", "data-k": "flag:" + t.id, on: { click: (e) => { e.stopPropagation(); openSteps(t.id); } } },
         icon("sparkle"), h("span", null, "Náročný úkol: rozepiš ho na kroky")));
-    }
-    if (o.now && mode === "today") {
-      main.append(h("button", { class: "btn-now", type: "button", "data-k": "start:" + t.id, on: { click: (e) => { e.stopPropagation(); openFocus(t.id); } } },
-        icon("play"), "Začít soustředění"));
     }
 
     el.append(check, main);
