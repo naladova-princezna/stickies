@@ -9,6 +9,8 @@
   const COLORS = ["violet", "teal", "pink", "amber", "blue", "lime"];
   const COLOR_NAMES = { violet: "Fialová", teal: "Tyrkysová", pink: "Růžová", amber: "Oranžová", blue: "Modrá", lime: "Zelená" };
   const DEFAULT_CATS = [["Práce", "violet"], ["Studium", "teal"], ["Domácnost", "amber"], ["Osobní", "pink"]];
+  const EST_DEFAULT = { light: 15, medium: 45, hard: 90 };
+  const EST_OPTS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
   const EFFORTS = ["light", "medium", "hard"];
   const EFFORT_LABEL = { light: "Lehký", medium: "Střední", hard: "Náročný" };
   /* Skupiny lístků v zásobníku: co hoří, co je priorita a co počká */
@@ -138,6 +140,7 @@
         .map((s) => ({ id: String(s.id || uuid()), text: String(s.text).slice(0, 200), done: Boolean(s.done) })),
       updated_at: t.updated_at || EPOCH,
     };
+    if (Number(t.est) >= 5) o.est = Math.min(600, Math.round(Number(t.est) / 5) * 5);
     if (t.link && t.link.r) o.link = { s: String(t.link.s || ""), r: String(t.link.r), x: String(t.link.x || ""), c: String(t.link.c || ""), d: Boolean(t.link.d) };
     if (t.routine_id) { o.routine_id = String(t.routine_id); o.routine_item = String(t.routine_item || ""); }
     if (t.deleted) o.deleted = true;
@@ -261,8 +264,9 @@
   const liveTasks = () => state.tasks.filter((t) => !t.deleted);
   const catById = (id) => liveCats().find((c) => c.id === id);
   const taskById = (id) => liveTasks().find((t) => t.id === id);
-  const effRank = { hard: 0, medium: 1, light: 2 };
-  const todayOpen = () => liveTasks().filter((t) => t.status === "today").sort((a, b) => effRank[a.effort] - effRank[b.effort] || a.pos - b.pos);
+  const estOf = (t) => t.est || EST_DEFAULT[t.effort] || 45;
+  const fmtDur = (m) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`);
+  const todayOpen = () => liveTasks().filter((t) => t.status === "today").sort(byPos);
   const doneToday = () => liveTasks().filter((t) => t.status === "done" && isToday(t.done_at)).sort((a, b) => new Date(b.done_at) - new Date(a.done_at));
   const backlogOf = (cid) => liveTasks().filter((t) => t.status === "backlog" && t.category_id === cid).sort(byPos);
 
@@ -530,6 +534,19 @@
         t.done_at = null;
         t.pos = Date.now();
       });
+    },
+    setEst(id, min) {
+      commit((s) => { const t = s.tasks.find((x) => x.id === id); if (t) t.est = min; }, null);
+    },
+    /** Posune úkol v dnešním pořadí o jedno místo nahoru (-1) nebo dolů (+1). */
+    moveToday(id, dir) {
+      const order = todayOpen(), i = order.findIndex((t) => t.id === id), j = i + dir;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      const a = order[i].id, b = order[j].id;
+      commit((s) => {
+        const x = s.tasks.find((t) => t.id === a), y = s.tasks.find((t) => t.id === b);
+        const p = x.pos; x.pos = y.pos; y.pos = p === y.pos ? p + dir : p;
+      }, null);
     },
     toToday(id) {
       commit((s) => { const t = s.tasks.find((x) => x.id === id); t.status = "today"; t.pos = Date.now(); }, "Přesunuto na dnes.");
@@ -909,6 +926,9 @@
     if (t.routine_id) foot.append(h("span", { class: "chip chip-routine", title: "Úkol z rutiny" }, icon("repeat"), h("span", { class: "sr-only" }, "Z rutiny")));
     foot.append(h("span", { class: `eff eff-${t.effort}`, title: EFFORT_LABEL[t.effort] + " úkol" },
       h("i"), h("i"), h("i"), h("span", { class: "sr-only" }, EFFORT_LABEL[t.effort])));
+    if (mode === "today" && !done) {
+      foot.append(h("span", { class: "chip chip-time", title: t.est ? "Odhad času" : "Odhad podle náročnosti" }, icon("clock"), (t.est ? "" : "~") + fmtDur(estOf(t))));
+    }
     if (!done && (t.steps.length || !flag || open)) {
       foot.append(h("button", {
         type: "button", class: "pill pill-sm", "data-k": "tog:" + t.id, "aria-expanded": String(open),
@@ -952,6 +972,11 @@
     }
 
     el.append(check, main);
+    if (mode === "today" && !done) {
+      el.draggable = true;
+      el.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", t.id); e.dataTransfer.effectAllowed = "move"; el.classList.add("is-dragging"); });
+      el.addEventListener("dragend", () => el.classList.remove("is-dragging"));
+    }
     if (mode === "backlog") el.addEventListener("click", (e) => { if (!e.target.closest("button,input,select,form,a,.steps-panel")) act.toToday(t.id); });
     return el;
   }
@@ -971,9 +996,9 @@
   function renderTodayList(open) {
     const box = $("today-list");
     if (!open.length) {
-      box.replaceChildren(emptyEl("Zatím nic na dnes", "Vyber úkol ze zásobníku, přidej nový, nebo nech vybrat mě.",
+      box.replaceChildren(emptyEl("Zatím nic na dnes", "Vyber úkol ze zásobníku, přidej nový, nebo ti pomůžu začít.",
         h("div", { class: "empty-actions" },
-          h("button", { class: "btn btn-primary", type: "button", on: { click: pickForMe } }, icon("shuffle"), "Vyber za mě"),
+          h("button", { class: "btn btn-primary", type: "button", on: { click: pickForMe } }, icon("sparkle"), "Nevím, kde začít"),
           h("a", { class: "btn", href: "#/zasobnik" }, "Projít zásobník"))));
       return;
     }
@@ -998,9 +1023,44 @@
 
     renderRoutineDue();
     renderTodayList(open);
+    renderTimeline(open);
     fillList($("done-list"), done, "done", emptyEl("Zatím nic hotového", "Co dokončíš, se objeví tady."), {});
     renderEnergy(open, done);
   }
+
+
+  /* ---------- Plán dne: pořadí bez hodin ---------- */
+  const SEQ_STEPS = [5, 15, 30, 45, 60, 90, 120];
+  const nextEst = (m) => SEQ_STEPS.find((x) => x > m) || SEQ_STEPS[0];
+
+  function renderTimeline(open) {
+    const list = $("tl-list");
+    const total = open.reduce((a, t) => a + estOf(t), 0);
+    $("tl-sum").textContent = open.length ? `${open.length} ${plural(open.length, "úkol", "úkoly", "úkolů")} · celkem ${fmtDur(total)}` : "";
+    if (!open.length) {
+      list.replaceChildren(h("li", { class: "seq-empty muted" }, "Na dnes zatím nic nemáš. Přidej úkol nebo ho vyber ze zásobníku."));
+      return;
+    }
+    list.replaceChildren(...open.map((t, i) => {
+      const c = catById(t.category_id) || { color: "violet", name: "" };
+      const dur = estOf(t);
+      const h_ = Math.round(Math.max(64, Math.min(150, 48 + dur * 0.9)));
+      return h("li", { class: "seq-item", "data-id": t.id },
+        h("span", { class: "seq-dot", "aria-hidden": "true" }, String(i + 1)),
+        h("div", { class: `seq-block c-${c.color}`, style: `min-height:${h_}px` },
+          h("button", { type: "button", class: "seq-check", "aria-label": `Hotovo: ${t.text}`, on: { click: (e) => act.complete(t.id, e.currentTarget) } }, icon("circle")),
+          h("div", { class: "seq-main" },
+            h("strong", null, t.text),
+            h("div", { class: "seq-meta" },
+              h("span", null, c.name),
+              h("button", { type: "button", class: "seq-dur", title: "Změnit odhad času", "aria-label": `Odhad času ${fmtDur(dur)}. Klepnutím změníš.`, on: { click: () => act.setEst(t.id, nextEst(dur)) } },
+                icon("clock"), (t.est ? "" : "~") + fmtDur(dur)))),
+          h("div", { class: "seq-move" },
+            h("button", { type: "button", class: "icon-btn", "aria-label": `Posunout výš: ${t.text}`, disabled: i === 0, on: { click: () => act.moveToday(t.id, -1) } }, icon("chevron-up")),
+            h("button", { type: "button", class: "icon-btn", "aria-label": `Posunout níž: ${t.text}`, disabled: i === open.length - 1, on: { click: () => act.moveToday(t.id, 1) } }, icon("chevron")))));
+    }));
+  }
+
 
   const liveDays = () => (state.days || []).filter((d) => !d.deleted);
   const dayRec = (date) => liveDays().find((d) => d.date === date) || null;
@@ -1119,7 +1179,7 @@
       lines.push(h("div", { class: "rec-status" }, icon("sparkle"), h("div", { class: "rec-fit" },
         h("span", null, `Ještě se vejde: ${words.join(", ")}.`),
         h("div", { class: "rec-fit-actions" },
-          h("button", { type: "button", class: "btn btn-sm", on: { click: pickForMe } }, icon("shuffle"), "Vyber za mě"),
+          h("button", { type: "button", class: "btn btn-sm", on: { click: pickForMe } }, icon("sparkle"), "Nevím, kde začít"),
           h("a", { href: "#/zasobnik", class: "inline-link" }, "Projít zásobník")))));
     } else if (rec.total) {
       lines.push(h("p", { class: "rec-status is-ok" }, icon("tick"), h("span", null, "Plán na dnes sedí.")));
@@ -1161,18 +1221,70 @@
     return new Set(ev.over === 0 ? ev.need : []);
   }
 
-  /** Rozhodovat se je náročné: vybere úkol, který se k dnešku hodí. */
-  function pickForMe() {
-    const back = liveTasks().filter((t) => t.status === "backlog");
-    if (!back.length) { toast("Zásobník je prázdný. Přidej úkol a pak ti pomůžu vybrat."); return; }
-    const fit = fitSet();
-    let pool = back.filter((t) => fit.has(t.effort));
-    if (!pool.length) pool = back.filter((t) => t.effort === "light");
-    if (!pool.length) pool = back;
-    const t = pool[Math.floor(Math.random() * pool.length)];
-    commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Vybráno na dnes: ${t.text}`);
+  /* ---------- Nevím, kde začít (úkolová paralýza) ---------- */
+  const help = { skip: new Set(), id: null };
+
+  /** Pořadí návrhů: co už je na dnes, pak Hoří, Priorita, Počká; uvnitř od nejlehčího. */
+  function starterQueue() {
+    const effortRank = { light: 0, medium: 1, hard: 2 };
+    const laneRank = { fire: 0, prio: 1, wait: 2 };
+    return liveTasks().filter((t) => t.status !== "done")
+      .sort((x, y) => (x.status === "today" ? 0 : 1) - (y.status === "today" ? 0 : 1)
+        || laneRank[laneOf(x)] - laneRank[laneOf(y)]
+        || effortRank[x.effort] - effortRank[y.effort]
+        || (x.pos || 0) - (y.pos || 0));
   }
-  $("pick-me").addEventListener("click", pickForMe);
+
+  function starterReason(t) {
+    const parts = [];
+    if (t.status === "today") parts.push("už máš na dnes");
+    if (laneOf(t) === "fire") parts.push("hoří");
+    else if (laneOf(t) === "prio") parts.push("je to priorita");
+    parts.push(t.effort === "light" ? "je lehký" : t.effort === "medium" ? "zvládneš ho v jednom bloku" : "půjde po malých krocích");
+    const txt = parts.join(", ");
+    return txt.charAt(0).toUpperCase() + txt.slice(1) + ".";
+  }
+
+  function renderStarter() {
+    const box = $("start-body");
+    const queue = starterQueue();
+    let t = queue.find((x) => !help.skip.has(x.id));
+    if (!t && queue.length) { help.skip.clear(); t = queue[0]; }
+    if (!t) { box.replaceChildren(h("p", { class: "muted" }, "Zásobník je prázdný. Přidej úkol a pak ti pomůžu začít.")); help.id = null; return; }
+    help.id = t.id;
+    const c = catById(t.category_id);
+    const step = t.steps.find((x) => !x.done);
+    box.replaceChildren(
+      h("p", { class: "start-reason" }, starterReason(t)),
+      h("h3", { class: "start-task" }, t.text),
+      c ? h("p", { class: "muted start-cat" }, c.name) : null,
+      h("div", { class: "start-first" },
+        h("strong", null, "První malý krok"),
+        h("p", null, step ? step.text : "Otevři to a udělej první malou věc. Stačí 5 minut, pak můžeš skončit.")));
+  }
+
+  function openStarter() {
+    help.skip.clear();
+    if (!starterQueue().length) { toast("Zásobník je prázdný. Přidej úkol a pak ti pomůžu začít."); return; }
+    renderStarter();
+    const d = $("start-dialog");
+    if (!d.open) d.showModal();
+    $("start-go").focus();
+  }
+
+  function startStarter() {
+    const t = taskById(help.id);
+    if (!t) return;
+    if (t.status === "backlog") commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Na dnes: ${t.text}`);
+    $("start-dialog").close();
+    if (location.hash !== "#/dnes") location.hash = "#/dnes";
+  }
+
+  $("start-go").addEventListener("click", startStarter);
+  $("start-next").addEventListener("click", () => { if (help.id) help.skip.add(help.id); renderStarter(); });
+  const pickForMe = openStarter;
+  $("pick-me").addEventListener("click", openStarter);
+  $("start-me").addEventListener("click", openStarter);
 
   function renderBackView() {
     const box = $("back-view");
@@ -1396,6 +1508,8 @@
     buildSeg($("edit-effort"), "edit-effort", t.effort);
     $("edit-lane").replaceChildren(...LANES.map((k) => h("option", { value: k }, LANE_LABEL[k])));
     $("edit-lane").value = laneOf(t);
+    $("edit-est").replaceChildren(h("option", { value: "" }, `Podle náročnosti (${fmtDur(EST_DEFAULT[t.effort])})`), ...EST_OPTS.map((m) => h("option", { value: String(m) }, fmtDur(m))));
+    $("edit-est").value = t.est ? (EST_OPTS.includes(t.est) ? String(t.est) : "") : "";
     const lr = findStudyReq(t);
     $("edit-due-field").hidden = !lr;
     $("edit-due").required = Boolean(lr) && lr.st.taskMode !== "all";
@@ -1429,7 +1543,7 @@
     const steps = qa(".step-row", $("steps-list"))
       .map((r) => ({ id: r.dataset.id, text: r.querySelector("input").value.trim(), done: r.dataset.done === "1" }))
       .filter((s) => s.text);
-    const cat = $("edit-cat").value, effort = segValue($("edit-effort")), lane = $("edit-lane").value;
+    const cat = $("edit-cat").value, effort = segValue($("edit-effort")), lane = $("edit-lane").value, est = Number($("edit-est").value) || 0;
     const dueField = !$("edit-due-field").hidden, due = $("edit-due").value;
     let dueChanged = false;
     commit((s) => {
@@ -1437,6 +1551,7 @@
       if (!t) return;
       t.text = text; t.category_id = cat; t.effort = effort; t.steps = steps;
       if (LANES.includes(lane)) t.lane = lane;
+      if (est) t.est = est; else delete t.est;
       const lr = dueField ? findStudyReq(t, s) : null;
       if (lr && (lr.r.due || "") !== due) { lr.r.due = due; dueChanged = true; }
     }, null);
