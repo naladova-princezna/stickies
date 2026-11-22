@@ -34,6 +34,7 @@
     maxTasks: 5,          // strop priorit za den
     fullLoad: 80,         // od tohoto vytížení je den "skoro plný"
     fullLoadMaxTasks: 3,
+    careFactor: 0.8,      // volitelné šetření kapacity v citlivých dnech cyklu
   };
 
   const ZONES = [
@@ -68,11 +69,12 @@
   }
 
   /** Doporučení pro daný den. */
-  function recommend(energy, load) {
+  function recommend(energy, load, opts) {
+    const factor = opts && opts.factor > 0 && opts.factor < 1 ? opts.factor : 1;
     const e = clamp(energy), l = clamp(load);
     const free = 1 - l / 100;
     const eff = CFG.minEffort + (1 - CFG.minEffort) * Math.pow(e / 100, CFG.curve);
-    let points = Math.round(CFG.maxPoints * free * eff);
+    let points = Math.round(CFG.maxPoints * free * eff * factor);
     if (e < CFG.zeroEnergy) points = 0;
     else if (e < CFG.reserveEnergy) points = Math.min(points, CFG.reserveMaxPoints);
 
@@ -98,6 +100,7 @@
       total: hard + medium + light,
       hardMax, maxTotal,
       zone: zoneOf(e),
+      careApplied: factor < 1,
     };
     rec.usedPoints = hard * CFG.cost.hard + medium * CFG.cost.medium + light * CFG.cost.light;
     rec.tips = tipsFor(e, l, rec);
@@ -131,7 +134,7 @@
     return { have, used, left: rec.points - used, over, need };
   }
 
-  const api = { CFG, ZONES, recommend, evaluate, zoneOf, clamp };
+  const api = { CFG, ZONES, recommend, evaluate, zoneOf, clamp, cost: (effort) => CFG.cost[effort] || CFG.cost.medium };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else window.Plan = api;
 })();

@@ -1,0 +1,27 @@
+const C = require("../cycle.js"), P = require("../plan.js");
+let ok = 0, bad = 0;
+const t = (n, c) => { c ? ok++ : (bad++, console.log("FAIL", n)); };
+const A = ["2026-10-01", "2026-10-29", "2026-11-26"]; // cyklus 28 dní
+t("délka 28", C.lengthOf(A) === 28);
+t("bez začátků = null", C.phaseOf("2026-11-01", []) === null);
+t("před prvním začátkem = null", C.phaseOf("2026-09-30", A) === null);
+const at = (d) => C.phaseOf(d, A);
+t("1. den menstruace", at("2026-10-01").phase.id === "menstrual" && at("2026-10-01").day === 1);
+t("6. den folikulární", at("2026-10-06").phase.id === "follicular");
+t("ovulace kolem 14. dne", at("2026-10-14").phase.id === "ovulation");
+t("luteální 18. den", at("2026-10-18").phase.id === "luteal" && at("2026-10-18").sensitive);
+t("předmenstruační 25. den", at("2026-10-25").phase.id === "premenstrual");
+t("poslední den cyklu", at("2026-10-28").phase.id === "premenstrual");
+t("nový cyklus začíná znovu", at("2026-10-29").phase.id === "menstrual" && at("2026-10-29").day === 1);
+t("po posledním začátku je to odhad", at("2026-11-30").predicted === true && at("2026-11-26").predicted === true);
+t("zastaralé označení", C.phaseOf("2026-12-31", A).stale === true);
+t("jediný začátek = výchozí délka", C.phaseOf("2026-11-10", ["2026-11-01"]).length === 28);
+t("nesmyslný rozestup se ignoruje", C.lengthOf(["2026-01-01", "2026-01-05"]) === 28);
+const rows = ["2026-10-02", "2026-10-03", "2026-10-04", "2026-10-26", "2026-10-27", "2026-10-28"].map((d, i) => ({ date: d, energy: i < 3 ? 70 : 40, load: 30 }));
+const bp = C.byPhase(rows, A, { "2026-10-26": 4 });
+t("průměr podle fáze", bp.length === 2 && bp.find((x) => x.id === "premenstrual").energy === 40 && bp.find((x) => x.id === "menstrual").energy === 70);
+t("málo dnů se nevypisuje", C.byPhase(rows.slice(0, 2), A).length === 0);
+const base = P.recommend(60, 30), care = P.recommend(60, 30, { factor: 0.8 });
+t("šetření snižuje kapacitu", care.points < base.points && care.careApplied === true);
+t("bez šetření stejné jako dřív", P.recommend(60, 30, { factor: 1 }).points === base.points);
+console.log(`cycle: ${ok} OK, ${bad} FAIL`); process.exit(bad ? 1 : 0);
