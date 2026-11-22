@@ -25,7 +25,7 @@ var THESIS_COLOR='#0e7490';
 
 var S=null, D=null, route='prehled', saveTimer=null, filterSubj='', snap='[]';
 var fl={term:'cur',statut:'',q:''};
-var ui={open:{},show:{},qa:{sid:'',due:'week',text:'',date:''}};
+var ui={open:{},fold:{},show:{},qa:{sid:'',due:'week',text:'',date:''}};
 
 /* ---------- pomocné ---------- */
 function $(s){return document.querySelector(s);}
@@ -428,7 +428,7 @@ function reqRow(s,r,showSubj){
   return '<li class="row'+(r.done?' done':'')+'"><label class="cb"><input type="checkbox" data-change="toggle" data-s="'+s.id+'" data-r="'+r.id+'"'+(r.done?' checked':'')+' aria-label="Splněno: '+esc(r.title)+'"><span class="bx" aria-hidden="true"></span></label>'+
    '<div class="main"><div class="t">'+esc(r.title)+'</div><div class="meta">'+(showSubj?chip(s):'')+dueHTML(r)+(ts==='today'?'<span class="chip lk">dnes ve Stickies</span>':'')+'</div>'+
    (r.note?'<details class="rd"><summary>Podrobnosti</summary><div class="rnote">'+linkify(r.note)+'</div></details>':'')+'</div>'+
-   '<div class="tools">'+(can&&!r.done?'<button class="ibtn" type="button" data-act="focus" data-id="'+r.tid+'" aria-label="Začít soustředění: '+esc(r.title)+'" title="Začít soustředění">▶</button>':'')+menuHTML(s,r)+'</div></li>';
+   '<div class="tools">'+menuHTML(s,r)+'</div></li>';
 }
 function noSubjects(){return onboardingCard()+valueProps();}
 function dd(v){return v?fmt(v)+' · <span class="muted">'+rel(v)+'</span>':'<span class="muted">nezadáno</span>';}
@@ -467,10 +467,10 @@ function progressCard(){
   return '<section class="card"><div class="head-row"><h3>'+(pct>=100?'Kredity jsou splněné':'Splněno '+pct+' %')+'</h3></div>'+
    '<div class="bar" style="margin:10px 0" role="img" aria-label="'+pct+' %"><i style="width:'+pct+'%"></i></div>'+
    '<p class="soft">'+(left?'Do cíle zbývá '+left+' '+plural(left,'kredit','kredity','kreditů')+'.':'Všechny kredity máš. Zbývá dokončit státnice a práci.')+'</p>'+
-   '<div class="tiles"><div class="tile"><b>'+creditsEarned()+' / '+creditsMin()+'</b><span>získaných kreditů</span></div>'+
+   foldLink('cisla','Podrobná čísla')+(ui.fold.cisla?'<div class="tiles"><div class="tile"><b>'+creditsEarned()+' / '+creditsMin()+'</b><span>získaných kreditů</span></div>'+
    '<div class="tile"><b>'+avgStr(D.subjects)+'</b><span>vážený průměr A–F</span>'+(D.stagAvg?'<small>STAG uvádí '+esc(D.stagAvg)+(D.stagDate?' k '+fmtShort(D.stagDate):'')+'</small>':'')+'</div>'+
    '<div class="tile"><b>'+termDone+' / '+termPlan+'</b><span>kreditů v '+tlabel(ct.year+' '+ct.sem)+'</span></div>'+
-   '<div class="tile win"><b>'+wins+'</b><span>'+plural(wins,'splněná věc','splněné věci','splněných věcí')+' za 7 dní</span></div></div></section>';
+   '<div class="tile win"><b>'+wins+'</b><span>'+plural(wins,'splněná věc','splněné věci','splněných věcí')+' za 7 dní</span></div></div>':'')+'</section>';
 }
 function pickNow(){
   var open=dueList(),up=open.filter(function(x){return diff(x.r.due)>=0;}),ov=open.filter(function(x){return diff(x.r.due)<0;});
@@ -489,8 +489,7 @@ function nowCard(p){
   var lead=d==null?'Bez termínu, ale patří do tohoto semestru':(d<0?'Tohle čeká nejdéle. Stačí začít, i kdyby na pět minut.':(d===0?'Termín je dnes':(d<=3?'Termín se blíží':'Nejbližší na řadě')));
   return '<section class="card now"><p class="eyebrow">Teď stačí tohle jedno</p><h2>'+esc(r.title)+'</h2><div class="meta">'+chip(s)+dueHTML(r)+'</div><p class="lead">'+lead+'</p>'+
    '<div class="now-actions"><button class="btn primary big" type="button" data-act="done"'+a+'>✓ Hotovo</button>'+
-   (can?'<button class="btn big" type="button" data-act="focus" data-id="'+r.tid+'">▶ Soustředit se</button>':'')+
-   '<details class="more"><summary class="btn big">Posunout termín</summary><div class="menu"><button type="button" data-act="due"'+a+' data-v="1">Zítra</button><button type="button" data-act="due"'+a+' data-v="7">Za týden</button>'+(r.due?'<button type="button" data-act="due"'+a+' data-v="none">Bez termínu</button>':'')+'<button type="button" data-act="edit-req"'+a+'>Upravit podmínku</button></div></details></div>'+
+   '<details class="more"><summary class="btn big">Až jindy</summary><div class="menu"><button type="button" data-act="due"'+a+' data-v="1">Zítra</button><button type="button" data-act="due"'+a+' data-v="7">Za týden</button>'+(r.due?'<button type="button" data-act="due"'+a+' data-v="none">Bez termínu</button>':'')+'<button type="button" data-act="edit-req"'+a+'>Upravit podmínku</button></div></details></div>'+
    (r.note?'<details class="rd"><summary>Podrobnosti zadání</summary><div class="rnote">'+linkify(r.note)+'</div></details>':'')+'</section>';
 }
 function weekCard(){
@@ -508,8 +507,23 @@ function weekCard(){
   var txt=(nd||ns)?'Tento týden: '+nd+' '+plural(nd,'termín','termíny','termínů')+(ns?' a '+ns+' '+plural(ns,'hodina','hodiny','hodin')+' výuky':''):'Tento týden nemáš nic naplánováno.';
   return '<section class="card week"><div class="head-row"><h3>Tento týden</h3><span class="muted">'+txt+'</span></div><div class="wk">'+cells+'</div><div class="legend" style="margin-top:8px"><span><i class="ld dd"></i>termín</span><span><i class="ld ds"></i>výuka</span></div></section>';
 }
+function weekSummary(){
+  var now=new Date(),dow=(now.getDay()+6)%7,st=new Date(now);st.setDate(now.getDate()-dow);
+  var open=allReqs().filter(function(q){return q.r.due&&!q.r.done&&!passed(q.s);}),n=0;
+  for(var i=0;i<7;i++){var dt=new Date(st);dt.setDate(st.getDate()+i);var k=ymd(dt);n+=open.filter(function(q){return q.r.due===k;}).length+D.sessions.filter(function(q){return q.date===k;}).length;}
+  return n?n+' '+plural(n,'věc','věci','věcí'):'nic naplánováno';
+}
 function plural(n,a,b,c){return n===1?a:(n>=2&&n<=4?b:c);}
 function winsCount(){var from=addDays(-6);return allReqs().filter(function(q){return q.r.done&&q.r.doneAt&&q.r.doneAt>=from;}).length;}
+
+/** Sbalitelný blok: v přehledu zůstane jen nadpis a jedna věta, detaily se otevřou na klepnutí. */
+function foldLink(id,title,sum){
+  var open=!!ui.fold[id];
+  return '<button class="fold-head" type="button" data-act="tfold" data-id="'+id+'" aria-expanded="'+open+'"><b>'+title+'</b>'+(sum?'<span class="muted">'+sum+'</span>':'')+'<span class="chev" aria-hidden="true">›</span></button>';
+}
+function foldCard(id,title,sum,body){
+  return '<section class="card fold'+(ui.fold[id]?' open':'')+'">'+foldLink(id,title,sum)+(ui.fold[id]?'<div class="fold-body">'+body+'</div>':'')+'</section>';
+}
 
 function viewOverview(){
   var h=studyLine();
@@ -521,12 +535,13 @@ function viewOverview(){
   var rest=p.up.filter(function(x){return x!==p.x;}).concat(p.ov.filter(function(x){return x!==p.x;}).reverse());
   var wins=winsCount(),waiting=p.ov.length;
   h+=nowCard(p)+progressCard()+onb;
-  if(rest.length)h+='<section class="card"><div class="head-row"><h3>Dál na řadě</h3><a class="link" href="#" data-act="go" data-id="deadliny">Všechny termíny'+(rest.length>3?' ('+rest.length+')':'')+'</a></div><ul class="list">'+rest.slice(0,3).map(function(x){return reqRow(x.s,x.r,true);}).join('')+'</ul>'+
+  if(rest.length)h+='<section class="card"><div class="head-row"><h3>Dál na řadě</h3><a class="link" href="#" data-act="go" data-id="deadliny">Všechny termíny'+(rest.length>2?' ('+rest.length+')':'')+'</a></div><ul class="list">'+rest.slice(0,2).map(function(x){return reqRow(x.s,x.r,true);}).join('')+'</ul>'+
     (waiting?'<p class="soft">Čeká na dořešení: '+waiting+'. Nic se neděje, vybírej po jedné věci.</p>':'')+'</section>';
-  h+=weekCard();
-  h+='<section class="card"><div class="head-row"><h3>Předměty v '+tlabel(ct.year+' '+ct.sem)+'</h3><a class="link" href="#" data-act="go" data-id="predmety">Všechny předměty</a></div>'+
-   (termSubs.length?termSubs.map(function(s){var q=prog(s);return '<div class="minirow" style="--c:'+col(s)+'"><span class="nm">'+esc(s.name)+'</span><div class="bar" role="img" aria-label="'+q+' %"><i style="width:'+q+'%"></i></div><span class="p">'+(s.grade?gradeHTML(s):q+' %')+'</span></div>';}).join(''):'<p class="muted">V aktuálním semestru nemáš zapsané žádné předměty.</p>')+'</section>';
-  if(D.hasThesis)h+=thesisCard();
+  h+=foldCard('tyden','Tento týden',weekSummary(),weekCard());
+  h+=foldCard('predmety','Předměty v '+tlabel(ct.year+' '+ct.sem),termSubs.length+' '+plural(termSubs.length,'předmět','předměty','předmětů'),
+   (termSubs.length?termSubs.map(function(s){var q=prog(s);return '<div class="minirow" style="--c:'+col(s)+'"><span class="nm">'+esc(s.name)+'</span><div class="bar" role="img" aria-label="'+q+' %"><i style="width:'+q+'%"></i></div><span class="p">'+(s.grade?gradeHTML(s):q+' %')+'</span></div>';}).join(''):'<p class="muted">V aktuálním semestru nemáš zapsané žádné předměty.</p>')+
+   '<p style="margin-top:10px"><a class="link" href="#" data-act="go" data-id="predmety">Všechny předměty</a></p>');
+  if(D.hasThesis)h+=foldCard('diplomka',thesisLabel(),'',thesisCard());
   return h+studyActions();
 }
 
@@ -741,10 +756,10 @@ document.addEventListener('click',function(e){
     case 'go':goRoute(id);break;
     case 'done':setDone(sid,rid,true);break;
     case 'due':setDue(sid,rid,b.getAttribute('data-v'));break;
-    case 'focus':if(HOST&&HOST.focus)HOST.focus(id);break;
     case 'totoday':if(HOST&&HOST.toToday){HOST.toToday(id);toast('Přidáno na dnes ve Stickies.');render();}break;
     case 'toast-undo':if(ui.undo){var u=ui.undo;ui.undo=null;$('#toast').hidden=true;u();}break;
     case 'tsubj':ui.open[sid]=!ui.open[sid];render();break;
+    case 'tfold':ui.fold[id]=!ui.fold[id];render();break;
     case 'more':ui.show[id]=!ui.show[id];render();break;
     case 'fterm':fl.term=id;render();break;
     case 'fstatut':fl.statut=fl.statut===id?'':id;render();break;
