@@ -152,6 +152,7 @@
               <p class="eyebrow" id="date"></p>
               <h1 id="h-today">Dnes</h1>
               <p class="muted" id="progress-text"></p>
+              <button id="start-me" class="btn btn-primary btn-start" type="button"><svg class="i"><use href="#i-sparkle"/></svg>Nevím, kde začít</button>
             </div>
             <div class="ring" aria-hidden="true">
               <svg viewBox="0 0 72 72" width="72" height="72">
@@ -219,7 +220,7 @@
             </div>
             <div class="head-actions">
               <div id="back-view" class="seg-switch" role="group" aria-label="Řazení zásobníku"></div>
-              <button id="pick-me" class="btn" type="button"><svg class="i"><use href="#i-shuffle"/></svg>Vyber za mě</button>
+              <button id="pick-me" class="btn" type="button"><svg class="i"><use href="#i-sparkle"/></svg>Nevím, kde začít</button>
               <span class="count count-lg" id="count-backlog">0</span>
             </div>
           </div>
@@ -454,6 +455,19 @@
         <p class="fine-left">Načtená záloha se sloučí s tím, co už tu je. Nic se nepřepíše naslepo.</p>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="start-dialog" class="start" aria-labelledby="start-title">
+    <div class="start-card">
+      <p class="eyebrow">Nevím, kde začít</p>
+      <h2 id="start-title">Začni tímhle</h2>
+      <div id="start-body"></div>
+      <div class="dialog-actions start-actions">
+        <button type="button" id="start-go" class="btn btn-primary btn-go">Jdu na to (5 minut)</button>
+        <button type="button" id="start-next" class="btn">Jiný úkol</button>
+        <button type="button" class="btn" data-close>Zavřít</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="focus-dialog" class="focus" aria-labelledby="focus-title">

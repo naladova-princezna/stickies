@@ -971,9 +971,9 @@
   function renderTodayList(open) {
     const box = $("today-list");
     if (!open.length) {
-      box.replaceChildren(emptyEl("Zatím nic na dnes", "Vyber úkol ze zásobníku, přidej nový, nebo nech vybrat mě.",
+      box.replaceChildren(emptyEl("Zatím nic na dnes", "Vyber úkol ze zásobníku, přidej nový, nebo ti pomůžu začít.",
         h("div", { class: "empty-actions" },
-          h("button", { class: "btn btn-primary", type: "button", on: { click: pickForMe } }, icon("shuffle"), "Vyber za mě"),
+          h("button", { class: "btn btn-primary", type: "button", on: { click: pickForMe } }, icon("sparkle"), "Nevím, kde začít"),
           h("a", { class: "btn", href: "#/zasobnik" }, "Projít zásobník"))));
       return;
     }
@@ -1119,7 +1119,7 @@
       lines.push(h("div", { class: "rec-status" }, icon("sparkle"), h("div", { class: "rec-fit" },
         h("span", null, `Ještě se vejde: ${words.join(", ")}.`),
         h("div", { class: "rec-fit-actions" },
-          h("button", { type: "button", class: "btn btn-sm", on: { click: pickForMe } }, icon("shuffle"), "Vyber za mě"),
+          h("button", { type: "button", class: "btn btn-sm", on: { click: pickForMe } }, icon("sparkle"), "Nevím, kde začít"),
           h("a", { href: "#/zasobnik", class: "inline-link" }, "Projít zásobník")))));
     } else if (rec.total) {
       lines.push(h("p", { class: "rec-status is-ok" }, icon("tick"), h("span", null, "Plán na dnes sedí.")));
@@ -1161,18 +1161,72 @@
     return new Set(ev.over === 0 ? ev.need : []);
   }
 
-  /** Rozhodovat se je náročné: vybere úkol, který se k dnešku hodí. */
-  function pickForMe() {
-    const back = liveTasks().filter((t) => t.status === "backlog");
-    if (!back.length) { toast("Zásobník je prázdný. Přidej úkol a pak ti pomůžu vybrat."); return; }
-    const fit = fitSet();
-    let pool = back.filter((t) => fit.has(t.effort));
-    if (!pool.length) pool = back.filter((t) => t.effort === "light");
-    if (!pool.length) pool = back;
-    const t = pool[Math.floor(Math.random() * pool.length)];
-    commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Vybráno na dnes: ${t.text}`);
+  /* ---------- Nevím, kde začít (úkolová paralýza) ---------- */
+  const help = { skip: new Set(), id: null };
+
+  /** Pořadí návrhů: co už je na dnes, pak Hoří, Priorita, Počká; uvnitř od nejlehčího. */
+  function starterQueue() {
+    const effortRank = { light: 0, medium: 1, hard: 2 };
+    const laneRank = { fire: 0, prio: 1, wait: 2 };
+    return liveTasks().filter((t) => t.status !== "done")
+      .sort((x, y) => (x.status === "today" ? 0 : 1) - (y.status === "today" ? 0 : 1)
+        || laneRank[laneOf(x)] - laneRank[laneOf(y)]
+        || effortRank[x.effort] - effortRank[y.effort]
+        || (x.pos || 0) - (y.pos || 0));
   }
-  $("pick-me").addEventListener("click", pickForMe);
+
+  function starterReason(t) {
+    const parts = [];
+    if (t.status === "today") parts.push("už máš na dnes");
+    if (laneOf(t) === "fire") parts.push("hoří");
+    else if (laneOf(t) === "prio") parts.push("je to priorita");
+    parts.push(t.effort === "light" ? "je lehký" : t.effort === "medium" ? "zvládneš ho v jednom bloku" : "půjde po malých krocích");
+    const txt = parts.join(", ");
+    return txt.charAt(0).toUpperCase() + txt.slice(1) + ".";
+  }
+
+  function renderStarter() {
+    const box = $("start-body");
+    const queue = starterQueue();
+    let t = queue.find((x) => !help.skip.has(x.id));
+    if (!t && queue.length) { help.skip.clear(); t = queue[0]; }
+    if (!t) { box.replaceChildren(h("p", { class: "muted" }, "Zásobník je prázdný. Přidej úkol a pak ti pomůžu začít.")); help.id = null; return; }
+    help.id = t.id;
+    const c = catById(t.category_id);
+    const step = t.steps.find((x) => !x.done);
+    box.replaceChildren(
+      h("p", { class: "start-reason" }, starterReason(t)),
+      h("h3", { class: "start-task" }, t.text),
+      c ? h("p", { class: "muted start-cat" }, c.name) : null,
+      h("div", { class: "start-first" },
+        h("strong", null, "První malý krok"),
+        h("p", null, step ? step.text : "Otevři to a udělej první malou věc. Stačí 5 minut, pak můžeš skončit.")));
+  }
+
+  function openStarter() {
+    help.skip.clear();
+    if (!starterQueue().length) { toast("Zásobník je prázdný. Přidej úkol a pak ti pomůžu začít."); return; }
+    renderStarter();
+    const d = $("start-dialog");
+    if (!d.open) d.showModal();
+    $("start-go").focus();
+  }
+
+  function startStarter() {
+    const t = taskById(help.id);
+    if (!t) return;
+    if (t.status === "backlog") commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Na dnes: ${t.text}`);
+    $("start-dialog").close();
+    openFocus(t.id);
+    setFocusDur(5);
+    startTimer();
+  }
+
+  $("start-go").addEventListener("click", startStarter);
+  $("start-next").addEventListener("click", () => { if (help.id) help.skip.add(help.id); renderStarter(); });
+  const pickForMe = openStarter;
+  $("pick-me").addEventListener("click", openStarter);
+  $("start-me").addEventListener("click", openStarter);
 
   function renderBackView() {
     const box = $("back-view");

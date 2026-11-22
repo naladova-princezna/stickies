@@ -967,3 +967,17 @@ select.lane-sel.lane-wait { --lc: #6fb7c9; color: var(--muted); }
   .page-head .seg-switch { width: 100%; }
   .page-head .seg-btn { flex: 1; padding: 0 8px; }
 }
+
+/* ---------- Nevím, kde začít ---------- */
+.btn-start { margin-top: 12px; min-height: 48px; padding: 0 22px; font-size: 16px; }
+.btn-start .i { width: 20px; height: 20px; }
+dialog.start { width: min(460px, 92vw); }
+.start-card { display: grid; gap: 14px; }
+.start-reason { font-size: 14px; font-weight: 700; color: #a5f7e2; }
+.start-task { font-size: 24px; line-height: 1.25; font-weight: 800; overflow-wrap: anywhere; }
+.start-cat { font-size: 14px; }
+.start-first { padding: 14px 16px; border-radius: 16px; background: rgba(31, 224, 184, .1); border: 1px solid rgba(31, 224, 184, .25); }
+.start-first strong { font-size: 13px; color: #a5f7e2; }
+.start-first p { margin-top: 4px; font-size: 16px; font-weight: 600; }
+.start-actions { flex-wrap: wrap; }
+.start-actions .btn-go { flex: 1 1 100%; min-height: 54px; font-size: 17px; }
