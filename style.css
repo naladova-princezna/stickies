@@ -942,3 +942,7 @@ select.lane-sel.lane-wait { --lc: #6fb7c9; color: var(--muted); }
   #print-root tr { break-inside: avoid; }
   #print-root .pr-sum { font-weight: 700; margin: 0 0 14pt; }
 }
+
+/* Přihlášení: vedlejší akce */
+.login-alt { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.login-alt .btn { flex: 1 1 auto; }

@@ -1,58 +1,42 @@
 # Stickies
 
-Úkoly ve stylu sticky notes, navržené tak, aby se s nimi dobře pracovalo i při ADHD a dalších odlišnostech pozornosti. Kategorie jsou podstránky v boční liště, každý lístek má barvu své kategorie, každý úkol jde rozepsat na kroky, stránka **Dnes** doporučí podle energie a vytížení, kolik toho dnes zvládneš, a úkol můžeš dělat v režimu **Soustředění** s viditelným časovačem. Data každého uživatele jsou v **jednom souboru v jednom datovém repozitáři na GitHubu**. Přihlášení je jen jménem.
+Úkoly ve stylu sticky notes, navržené tak, aby se s nimi dobře pracovalo i při ADHD a dalších odlišnostech pozornosti. Kategorie jsou podstránky v boční liště, každý lístek má barvu své kategorie, každý úkol jde rozepsat na kroky, stránka **Dnes** doporučí podle energie a vytížení, kolik toho dnes zvládneš, a úkol můžeš dělat v režimu **Soustředění** s viditelným časovačem. Data každého uživatele jsou v **databázi Supabase** a chrání je přihlášení (e-mail + heslo) a pravidla Row Level Security.
 
 Statický web bez build kroku. Funguje i jako aplikace na mobilu.
 
 ## 1. Nasazení na GitHub Pages
-1. Založ repozitář (např. `stickies`) a nahraj do něj obsah téhle složky (soubory musí být v kořeni).
-2. **Settings → Pages**: Source `Deploy from a branch`, větev `main`, složka `/ (root)`.
-3. Za minutu je web na `https://TVOJE-JMENO.github.io/stickies/`.
+1. Soubory jsou v kořeni repozitáře. **Settings → Pages**: Source `Deploy from a branch`, větev `main`, složka `/ (root)`.
+2. Web běží na `https://TVOJE-JMENO.github.io/stickies/`.
 
-Tenhle repozitář je veřejný. Data v něm nejsou, ale `users.js` obsahuje tokeny (viz bezpečnost níže).
+## 2. Backend: Supabase
+Projekt `stickies` (region eu-central-1). Adresa a **veřejný** (publishable) klíč jsou na začátku `cloud.js`. Ten klíč je určený do prohlížeče a sám o sobě k datům nedává přístup.
 
-## 2. Datový repozitář a token (jednou)
-1. Založ **soukromý** repozitář, např. `stickies-data` (Private, zaškrtni „Add a README file“).
-2. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-   - *Repository access*: Only select repositories → jen `stickies-data`.
-   - *Repository permissions → Contents*: **Read and write**. Nic dalšího.
-   - Nastav platnost (např. 1 rok) a token zkopíruj.
+Schéma (viz migrace v Supabase):
+- `user_data`: jeden řádek na uživatele (`user_id`, `data` jsonb, `rev`, `updated_at`). `data` má stejný tvar jako dřív `data/<jmeno>.json`.
+- `user_data_history`: snapshot po každém uložení, posledních 300 verzí na uživatele (náhrada za historii commitů).
+- `allowed_emails`: seznam e-mailů, které si smí vytvořit účet. Z aplikace není čitelná ani zapisovatelná.
 
-## 3. Kam zapsat uživatele: soubor `users.js`
-Na GitHubu otevři `users.js` v repozitáři s aplikací → tužka (Edit) a vyplň:
+### Přidání nového uživatele
+V SQL Editoru ve Supabase: `insert into public.allowed_emails (email) values ('jmeno@example.com');` (malými písmeny). Pak si ten člověk v aplikaci klikne na **Vytvořit účet**, potvrdí e-mail a nastaví heslo.
 
-```js
-window.STICKIES_REPO = "vlastnik/stickies-data";   // tvůj soukromý datový repozitář
-window.STICKIES_USERS = {
-  "magda": { token: ["github_pat_11ABCDE", "zbytek tokenu"] },
-  "petr":  { token: ["github_pat_11KLMNO", "zbytek tokenu"] },
-};
-```
-Pak *Commit changes*. Za minutu je to na webu.
+### Jednorázové nastavení v Supabase (Authentication)
+- **URL Configuration → Site URL**: adresa webu (https://naladova-princezna.github.io/stickies/). Bez toho míří odkazy z e-mailů jinam.
+- **Sign In / Providers → Email**: ponech zapnuté potvrzování e-mailu. Registraci hlídá `allowed_emails`.
+- Pro víc než pár e-mailů za hodinu si nastav vlastní SMTP (výchozí odesílání je silně omezené).
 
-**Token musí být rozdělený na dvě části** (uvozovky, čárka mezi nimi, rozdělit lze kdekoli uprostřed). GitHub totiž prohledává veřejné repozitáře a celý token v nich okamžitě sám zneplatní. Rozdělený token nepozná. Aplikace obě části před použitím spojí.
-
-- Jméno piš malými písmeny, bez mezer a diakritiky. Při přihlášení na velikosti písmen nezáleží.
-- Uživatel otevře stránku, napíše jen své jméno a vidí své úkoly. Žádné heslo ani nastavování.
-- Každý má svůj soubor `data/<jméno>.json` (vytvoří se sám).
-- Můžeš dát všem stejný token, nebo každému vlastní.
-- Dokud v `users.js` nejsou žádní uživatelé, aplikace běží bez přihlášení jen v zařízení.
-
-### Bezpečnost, upřímně
-- **Rozdělení tokenu zabrání jen automatickému zneplatnění od GitHubu, ne čtení. `users.js` je veřejný, takže token v něm je vidět každému, kdo ten soubor otevře.** Kdo ho najde, může číst a měnit data v datovém repozitáři. Datový repozitář tím pádem není soukromý.
-- Škodu to omezuje fine-grained token jen na jeden datový repozitář a jen s právem Contents. Nikdo se přes něj nedostane k tvým jiným repozitářům. Může ale úkoly přečíst nebo smazat. Historie commitů umožní data obnovit.
-- Nedávej do aplikace nic, co nesmí vidět cizí člověk. Adresu webu nikde nezveřejňuj.
-- Kdyby se token zneužil, na GitHubu ho zruš a vytvoř nový.
-- Aplikace odmítne **veřejný** datový repozitář.
-- Zvlášť pro citlivější lidi můžeš udělat zvlášť repozitář i token a v jejich řádku uvést `repo: "vlastnik/jiny-repozitar"`.
-- Pokud někdy budeš chtít opravdové zabezpečení, je potřeba heslo (v1–v4 ho měly) nebo vlastní server.
+### Bezpečnost
+- Každý uživatel vidí a mění jen svůj řádek (RLS: `user_id = auth.uid()`). Ostatní účty, anonymní přístup i klient při mazání dokumentu odmítá databáze.
+- `rev` a `updated_at` nastavuje databáze, klient je podvrhnout nemůže.
+- V repozitáři už nejsou žádné tokeny.
+- Heslo drží Supabase Auth (hash), aplikace ho nikam neukládá.
 
 ### Jak ukládání funguje
-- Změny se po 1,5 s uloží jako jeden commit. Historie commitů je záloha.
+- Změny se po 1,5 s uloží jako jeden zápis. Zápis je podmíněný číslem verze (`rev`), takže se nic nepřepíše naslepo.
 - Zařízení si změny stahují při návratu do aplikace a každých 45 s.
 - Souběžné změny se sloučí po jednotlivých úkolech (vyhrává novější změna). Offline se pracuje normálně a odešle se po připojení.
-- Smazané položky se v souboru drží 60 dní, aby se smazání přeneslo i na dlouho offline zařízení.
-- V nabídce úložiště je záloha a načtení zálohy.
+- Smazané položky se v datech drží 60 dní, aby se smazání přeneslo i na dlouho offline zařízení.
+- V nabídce **Účet a záloha** je ruční záloha a načtení zálohy.
+- Místní kopie dat ze starší verze (GitHub) se při prvním přihlášení na zařízení převezme a sloučí, takže se neztratí ani změny udělané offline.
 
 ## 4. Jak se s tím pracuje
 - **Dnes**: dnešní priority (nahoře karta **Teď**), hotovo dnes a **Stav dne**.
@@ -128,7 +112,7 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | `plan.js` | Výpočet doporučení na dnes |
 | `stats.js` | Statistiky a odhad energie |
 | `studium.html`, `studium.js`, `studium.css` | Stránka Studium (studia, předměty, deadliny, zápisy, závěrečná práce) |
-| `users.js` | Seznam uživatelů a tokenů (vyplňuje správce) |
+| `cloud.js` | Přihlášení a ukládání dat na Supabase |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline režim a instalace na mobil |
 
 
