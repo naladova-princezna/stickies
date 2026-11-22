@@ -74,8 +74,8 @@
     del(k) { try { localStorage.removeItem(k); } catch { /* nic */ } },
   };
 
-  /** Nastavení tohoto zařízení. sex: "zena" | "muz" | "" (neuvedeno); care: šetřit kapacitu v citlivých fázích cyklu. */
-  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true, sex: "", care: false }, store.get(K.pref, {}));
+  /** Nastavení tohoto zařízení (velikost textu, animace, zvuk). */
+  const prefs = Object.assign({ fs: 1, calm: false, still: false, sound: true }, store.get(K.pref, {}));
 
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -189,6 +189,13 @@
     return o;
   }
 
+  /** Nastavení vázané na účet: záznam {id, on}. Synchronizuje se jako ostatní data. */
+  function nSetting(x) {
+    const o = { id: String(x.id), on: x.on === true, updated_at: x.updated_at || nowIso() };
+    if (x.deleted) o.deleted = true;
+    return o;
+  }
+
   function normalize(raw) {
     const r = raw && typeof raw === "object" ? raw : {};
     const cats = (Array.isArray(r.categories) ? r.categories : []).filter((x) => x && x.id).map(nCat);
@@ -199,7 +206,8 @@
     const legacy = nDayRec(r.day);                       // starší verze ukládaly jen dnešek
     if (legacy && legacy.set && !map.has(legacy.id)) map.set(legacy.id, legacy);
     const studies = (Array.isArray(r.studies) ? r.studies : []).filter((x) => x && x.id).map(nStudy);
-    return { categories: cats, tasks, routines, days: [...map.values()], studies };
+    const settings = (Array.isArray(r.settings) ? r.settings : []).filter((x) => x && x.id).map(nSetting);
+    return { categories: cats, tasks, routines, days: [...map.values()], studies, settings };
   }
 
   const canon = (s) => stable({
@@ -208,6 +216,7 @@
     r: [...(s.routines || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     d: [...(s.days || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     s: [...(s.studies || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    g: [...(s.settings || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
   });
 
   function pickNewer(x, y) {
@@ -232,6 +241,7 @@
     const routines = mergeLists(a.routines || [], b.routines || []);
     const days = mergeLists(a.days || [], b.days || []);
     const studies = mergeLists(a.studies || [], b.studies || []);
+    const settings = mergeLists(a.settings || [], b.settings || []);
     const alive = new Set(cats.filter((c) => !c.deleted).map((c) => c.id));
     const now = nowIso();
     for (const r of routines) {
@@ -242,14 +252,14 @@
     }
     const limit = Date.now() - TOMBSTONE_DAYS * 864e5;
     const fresh = (x) => !(x.deleted && (Date.parse(x.updated_at) || 0) < limit);
-    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh) };
+    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh), settings };
   }
 
   /** Změněným záznamům nastaví updated_at. */
   function touch(prev, next) {
     const now = nowIso();
     const strip = (o) => { const c = { ...o }; delete c.updated_at; return stable(c); };
-    for (const key of ["categories", "tasks", "routines", "days", "studies"]) {
+    for (const key of ["categories", "tasks", "routines", "days", "studies", "settings"]) {
       const pm = new Map((prev[key] || []).map((x) => [x.id, strip(x)]));
       for (const x of next[key] || []) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
     }
@@ -258,7 +268,7 @@
   /* =====================================================================
      Stav, uložení
      ===================================================================== */
-  let state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
+  let state = { categories: [], tasks: [], routines: [], days: [], studies: [], settings: [] };
   let meta = { sha: null, dirty: false };
   let gh = null;                    // {repo, token, path, branch}
   let version = 0;                  // počítadlo lokálních změn
@@ -408,7 +418,7 @@
           if (snapVer === version) meta.dirty = false;
           settled = true;
         } else {
-          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [] }, remote ? remote.sha : null);
+          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [], settings: merged.settings || [] }, remote ? remote.sha : null);
           if (res.conflict) continue;
           meta.sha = res.sha;
           if (snapVer === version) meta.dirty = false;
@@ -1087,10 +1097,19 @@
 
   /** Menstruační cyklus se ukazuje a počítá jen u žen. Bez volby se zapne jen tam, kde už jsou označené začátky. */
   const markedStarts = () => liveDays().filter((d) => d.cycle_start).map((d) => d.date);
-  const cycleOn = () => prefs.sex === "zena" || (prefs.sex === "" && markedStarts().length > 0);
+  const settingRec = (id) => (state.settings || []).find((x) => x.id === id && !x.deleted);
+  const settingOn = (id, fallback = false) => { const r = settingRec(id); return r ? r.on : fallback; };
+  function setSetting(id, on) {
+    commit((st) => {
+      st.settings = st.settings || [];
+      const cur = st.settings.find((x) => x.id === id);
+      if (cur) { cur.on = on; delete cur.deleted; } else st.settings.push({ id, on, updated_at: nowIso() });
+    });
+  }
+  const cycleOn = () => settingOn("cycle", markedStarts().length > 0);
   const cycleAnchors = () => (cycleOn() ? markedStarts() : []);
   const cycleNow = () => (cycleOn() ? Cycle.phaseOf(dayKey(), cycleAnchors()) : null);
-  const careEnabled = () => cycleOn() && prefs.care === true;
+  const careEnabled = () => cycleOn() && settingOn("care");
   /** Šetření kapacity jen když ho zapneš a ten den je citlivá fáze. */
   function recOpts(date = dayKey()) {
     if (!careEnabled()) return undefined;
@@ -1173,7 +1192,7 @@
     if (c.sensitive) {
       kids.push(h("p", { class: "cycle-tip" }, c.phase.tips[0]));
       kids.push(h("button", { type: "button", class: "btn btn-sm", "aria-pressed": String(careEnabled()),
-        on: { click: () => { prefs.care = !careEnabled(); savePrefs(); render(); } } },
+        on: { click: () => { setSetting("care", !careEnabled()); } } },
         careEnabled() ? "Šetřím kapacitu o 20 %. Vypnout" : "Šetřit kapacitu o 20 %"));
     }
     box.replaceChildren(...kids);
@@ -1996,7 +2015,7 @@
     const st = stats(), box = $("stats-body"), parts = [];
     const todayStr = dayKey();
     const cNow = cycleNow();
-    parts.push(nowPanel(), weekPanel(), ...(prefs.sex === "zena" || cycleOn() ? [foldPanel("cyklus", "Cyklus a fáze", cNow ? (cNow.stale ? "označ nový začátek" : `${cNow.day}. den · ${cNow.phase.label}`) : "volitelné", ...cyclePanel(st))] : []));
+    parts.push(nowPanel(), weekPanel(), ...(cycleOn() ? [foldPanel("cyklus", "Cyklus a fáze", cNow ? (cNow.stale ? "označ nový začátek" : `${cNow.day}. den · ${cNow.phase.label}`) : "volitelné", ...cyclePanel(st))] : []));
 
     if (st.n < Stats.CFG.minRows) {
       parts.push(statPanel("Zatím sbírám data",
@@ -2212,15 +2231,10 @@
     r.dataset.still = prefs.still ? "1" : "0";
   }
   function savePrefs() { store.set(K.pref, prefs); applyPrefs(); syncStudyFrame(); }
-  function syncCareRow() { const r = $("pref-care-row"); if (r) r.hidden = prefs.sex !== "zena"; }
+  function syncCareRow() { const r = $("pref-care-row"); if (r) r.hidden = !cycleOn(); $("pref-cycle").checked = cycleOn(); $("pref-care").checked = careEnabled(); }
   function buildPrefs() {
-    $("pref-sex").replaceChildren(...[["zena", "Žena"], ["muz", "Muž"], ["", "Neuvádět"]].map(([v, label]) => h("label", { class: "seg" },
-      h("input", Object.assign({ type: "radio", name: "pref-sex", value: v }, prefs.sex === v ? { checked: true } : {})),
-      h("span", null, label))));
-    $("pref-sex").addEventListener("change", (e) => { prefs.sex = e.target.value; if (prefs.sex !== "zena") prefs.care = false; savePrefs(); syncCareRow(); $("pref-care").checked = prefs.care; render(); });
-    $("pref-care").checked = Boolean(prefs.care);
-    $("pref-care").addEventListener("change", () => { prefs.care = $("pref-care").checked; savePrefs(); render(); });
-    syncCareRow();
+    $("pref-cycle").addEventListener("change", () => { setSetting("cycle", $("pref-cycle").checked); if (!$("pref-cycle").checked) setSetting("care", false); syncCareRow(); });
+    $("pref-care").addEventListener("change", () => { setSetting("care", $("pref-care").checked); syncCareRow(); });
     $("pref-fs").replaceChildren(...FS_OPTIONS.map(([v, label]) => h("label", { class: "seg" },
       h("input", Object.assign({ type: "radio", name: "pref-fs", value: String(v) }, prefs.fs === v ? { checked: true } : {})),
       h("span", null, label))));
@@ -2230,7 +2244,7 @@
       $(id).addEventListener("change", () => { prefs[key] = $(id).checked; savePrefs(); });
     }
   }
-  $("open-prefs").addEventListener("click", () => { closeSide(); $("prefs-dialog").showModal(); });
+  $("open-prefs").addEventListener("click", () => { closeSide(); syncCareRow(); $("prefs-dialog").showModal(); });
   $("open-print").addEventListener("click", () => { closeSide(); $("print-dialog").showModal(); });
   $("print-go").addEventListener("click", () => { const d = $("print-done").checked, s = $("print-steps").checked; $("print-dialog").close(); printTasks(d, s); });
 
@@ -2515,7 +2529,7 @@
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
-      state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
+      state = { categories: [], tasks: [], routines: [], days: [], studies: [], settings: [] };
       seedDefaults();
     }
     if (reconcileStudyLinks()) { version++; meta.dirty = true; persist(); }

@@ -527,13 +527,11 @@
     <div class="st-block" style="gap:18px">
       <div class="dlg-head"><h2 id="prefs-title">Pohodlí a vzhled</h2>
         <button type="button" class="icon-btn" data-close aria-label="Zavřít"><svg class="i"><use href="#i-x"/></svg></button></div>
-      <p class="muted">Nastavení platí jen v tomto zařízení.</p>
+      <p class="muted">Velikost textu, barvy, animace a zvuk platí jen v tomto zařízení. Cyklus se ukládá do účtu.</p>
       <fieldset class="field"><legend>Velikost textu</legend>
         <div id="pref-fs" class="seg-wrap" role="radiogroup"></div></fieldset>
-      <fieldset class="field"><legend>Pohlaví</legend>
-        <div id="pref-sex" class="seg-wrap" role="radiogroup"></div>
-        <p class="muted small">U žen se ukazuje a počítá menstruační cyklus. U ostatních zůstane skrytý.</p></fieldset>
-      <label class="switch" id="pref-care-row" hidden><input type="checkbox" id="pref-care"><span class="sw"></span><span class="sw-t"><strong>Šetřit kapacitu v citlivých fázích cyklu</strong><small>Doporučení pro den bude o pětinu mírnější.</small></span></label>
+      <label class="switch"><input type="checkbox" id="pref-cycle"><span class="sw"></span><span class="sw-t"><strong>Počítat s menstruačním cyklem</strong><small>Ukáže fáze cyklu a započítá je do odhadů. Platí pro celý účet na všech zařízeních.</small></span></label>
+      <label class="switch" id="pref-care-row" hidden><input type="checkbox" id="pref-care"><span class="sw"></span><span class="sw-t"><strong>Šetřit kapacitu v citlivých fázích</strong><small>Doporučení pro den bude o pětinu mírnější. Platí pro celý účet.</small></span></label>
       <label class="switch"><input type="checkbox" id="pref-calm"><span class="sw"></span><span class="sw-t"><strong>Klidnější barvy</strong><small>Tlumí sytost lístků, když je jich moc na oči.</small></span></label>
       <label class="switch"><input type="checkbox" id="pref-still"><span class="sw"></span><span class="sw-t"><strong>Bez animací</strong><small>Žádné konfety ani pohyb. Respektuje i nastavení systému.</small></span></label>
       <label class="switch"><input type="checkbox" id="pref-sound"><span class="sw"></span><span class="sw-t"><strong>Zvuk na konci časovače</strong><small>Krátké pípnutí, když soustředění skončí.</small></span></label>
