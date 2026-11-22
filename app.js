@@ -920,18 +920,16 @@
     }
     if (done && t.done_at) foot.append(h("span", { class: "time" }, isToday(t.done_at) ? fmtTime(t.done_at) : fmtDate(t.done_at)));
     if (fits) foot.append(h("span", { class: "chip chip-fit" }, "Sedí na dnes"));
-    let lanePickEl = null;
     if (mode === "backlog" && o.lanePick) {
       const sel = h("select", {
         class: `lane-sel lane-${laneOf(t)}`, "aria-label": `Skupina lístku: ${t.text}`, title: "Hoří deadline, Priorita nebo Počká", "data-k": "lane:" + t.id,
         on: { click: (e) => e.stopPropagation(), change: (e) => { e.stopPropagation(); act.setLane(t.id, e.target.value); } },
       }, ...LANES.map((k) => h("option", { value: k }, LANE_LABEL[k])));
       sel.value = laneOf(t);
-      lanePickEl = sel;
+      foot.append(sel);
     }
 
     const tools = h("div", { class: "tools" });
-    if (lanePickEl) tools.append(lanePickEl);
     if (mode === "backlog") {
       tools.append(h("button", { class: "pill", type: "button", "data-k": "today:" + t.id, "aria-label": `Přesunout na dnes: ${t.text}`, on: { click: (e) => { e.stopPropagation(); act.toToday(t.id); } } }, "Na dnes", icon("arrow-right")));
     }
