@@ -51,6 +51,7 @@
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5Z"/><path d="M4 21.5V5.5"/><path d="M9 8h7M9 12h5"/></symbol>
     <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="9" rx="2"/><path d="M7 14h10v7H7z"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20Z"/><path d="M12 10v5M12 18h.01"/></symbol>
   </svg>
 
@@ -141,6 +142,11 @@
           <div id="add-effort" class="seg-wrap"></div>
           <label class="toggle"><input type="checkbox" id="add-today"><span><svg class="i"><use href="#i-today"/></svg>Rovnou na dnes</span></label>
         </div>
+        <div class="composer-due">
+          <label for="add-due"><svg class="i"><use href="#i-calendar"/></svg>Termín</label>
+          <input id="add-due" type="date" aria-describedby="add-due-presets">
+          <div id="add-due-presets" class="presets" role="group" aria-label="Rychlá volba termínu"></div>
+        </div>
       </form>
 
       <main id="main" tabindex="-1">
@@ -164,6 +170,7 @@
             </div>
           </div>
 
+          <div id="deadline-due" class="deadline-due" hidden></div>
           <div id="routine-due" class="routine-due" hidden></div>
 
           <div class="today-grid">
@@ -223,7 +230,7 @@
               <span class="count count-lg" id="count-backlog">0</span>
             </div>
           </div>
-          <p class="muted hint">Klepnutím na lístek ho přesuneš do dnešních priorit. Do skupiny Hoří deadline, Priorita nebo Počká ho zařadíš výběrem přímo na lístku. Jak moc se to dnes vyplatí, ti poradí stránka Dnes.</p>
+          <p id="back-hint" class="muted hint"></p>
           <div id="backlog-grid" class="cat-grid" data-zone="backlog"></div>
         </section>
 
@@ -319,16 +326,18 @@
           <div id="edit-effort" class="seg-wrap" role="group" aria-labelledby="edit-effort-lbl"></div>
         </div>
       </div>
-      <div class="two">
-        <div class="field">
-          <label for="edit-lane">Skupina v zásobníku</label>
-          <select id="edit-lane"></select>
+      <div class="field" id="edit-due-field">
+        <label for="edit-due" id="edit-due-label">Termín</label>
+        <div class="due-edit">
+          <input id="edit-due" type="date" aria-describedby="edit-due-hint">
+          <div id="edit-due-presets" class="presets" role="group" aria-label="Rychlá volba termínu"></div>
         </div>
-        <div class="field" id="edit-due-field" hidden>
-          <label for="edit-due">Termín z předmětu</label>
-          <input id="edit-due" type="date">
-          <p id="edit-due-hint" class="steps-hint"></p>
-        </div>
+        <p id="edit-due-hint" class="steps-hint"></p>
+      </div>
+      <div class="field">
+        <label for="edit-lane">Skupina v zásobníku</label>
+        <select id="edit-lane"></select>
+        <p id="edit-lane-hint" class="steps-hint"></p>
       </div>
       <div class="field" id="steps-field">
         <span class="lbl">Kroky</span>
@@ -518,6 +527,7 @@
   </div>
 
   <script src="cloud.js"></script>
+  <script src="due.js"></script>
   <script src="plan.js"></script>
   <script src="stats.js"></script>
   <script src="app.js"></script>

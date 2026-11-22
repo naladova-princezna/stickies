@@ -946,3 +946,58 @@ select.lane-sel.lane-wait { --lc: #6fb7c9; color: var(--muted); }
 /* Přihlášení: vedlejší akce */
 .login-alt { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .login-alt .btn { flex: 1 1 auto; }
+
+/* ---------- Termíny ---------- */
+.chip-due { display: inline-flex; align-items: center; gap: 5px; }
+.chip-due .i { width: 13px; height: 13px; }
+.chip-due.due-overdue, .chip-due.due-today { background: var(--fg); color: var(--b); }
+.chip-due.due-soon { color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--fg); }
+.chip-due.due-far { opacity: .85; }
+
+/* Zásobník podle termínů: jeden sloupec skupin shora dolů */
+.dl-list { display: grid; gap: 18px; max-width: 1100px; }
+.dl-group { --gc: #6fb7c9; padding: 14px 16px 16px; border-radius: 20px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); border-left: 4px solid var(--gc); }
+.dl-overdue { --gc: #ffb86b; background: rgba(255, 184, 107, .06); }
+.dl-today { --gc: #1fe0b8; background: rgba(31, 224, 184, .06); }
+.dl-tomorrow { --gc: #8f84ff; }
+.dl-week { --gc: #8f84ff; }
+.dl-next { --gc: #6fb7c9; }
+.dl-later { --gc: #8794a8; }
+.dl-none { --gc: #5d6b80; }
+.dl-dot { width: 10px; height: 10px; margin-left: 4px; border-radius: 50%; background: var(--gc); flex: none; }
+.dl-head { flex-wrap: wrap; }
+.dl-head .count { margin-right: 0; }
+.dl-range { margin-right: auto; font-size: 13px; color: var(--muted); font-weight: 600; }
+.dl-bulk { width: auto; max-width: 220px; height: 38px; min-height: 38px; padding: 0 30px 0 12px; font-size: 13px; font-weight: 800; border-radius: 99px; background-color: transparent; border: 1px solid var(--gc); color: var(--text); margin-left: auto; }
+.dl-group .more-btn { grid-column: 1 / -1; }
+.dl-group .lane-hint { margin: -2px 0 12px; }
+
+/* Karta Blíží se termíny na Dnes */
+.deadline-due { display: grid; gap: 10px; margin: 0 0 18px; }
+.dl-card-title { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* Termín v přidání a úpravě úkolu */
+.composer-due { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.composer-due label { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; color: var(--muted); }
+.composer-due label .i { width: 16px; height: 16px; }
+.composer-due input[type="date"] { width: 170px; height: 46px; min-height: 46px; flex: none; }
+.composer-due .presets { margin: 0; }
+.due-edit { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.due-edit input[type="date"] { width: 170px; flex: none; }
+.due-edit .presets { margin: 0; }
+@media (max-width: 860px) {
+  .composer-due { display: grid; gap: 8px; }
+  .composer-due input[type="date"] { width: 100%; height: 52px; min-height: 52px; }
+  .dl-group { padding: 12px 12px 14px; }
+  .dl-bulk { max-width: 100%; width: 100%; margin-left: 0; }
+}
+.seg-switch { max-width: 100%; }
+.seg-switch .seg-btn { flex: 1 1 auto; }
+@media (max-width: 860px) {
+  .page-head { flex-wrap: wrap; align-items: flex-start; }
+  .page-head .head-actions { width: 100%; }
+  .page-head .seg-switch { width: 100%; }
+  .page-head .seg-switch .seg-btn { flex: 1 1 0; padding: 0 8px; }
+}
+.dl-group .notes { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.note .pill { white-space: nowrap; }

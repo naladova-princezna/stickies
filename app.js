@@ -2,6 +2,7 @@
   "use strict";
 
   const Plan = window.Plan;
+  const Due = window.Due;
 
   /* =====================================================================
      Konstanty
@@ -14,7 +15,7 @@
   /* Skupiny lístků v zásobníku: co hoří, co je priorita a co počká */
   const LANES = ["fire", "prio", "wait"];
   const LANE_LABEL = { fire: "Hoří deadline", prio: "Priorita", wait: "Počká" };
-  const LANE_HINT = { fire: "Termín je blízko nebo už uplynul.", prio: "Důležité, ale ještě nehoří.", wait: "Může chvíli počkat, nic se neděje." };
+  const LANE_HINT = { fire: "Termín je za dva dny a méně, nebo už uplynul. Plní se samo.", prio: "Důležité, ale ještě nehoří.", wait: "Může chvíli počkat, nic se neděje." };
   const laneOf = (t) => (LANES.includes(t.lane) ? t.lane : "wait");
   const STATUSES = ["today", "backlog", "done"];
   const TOMBSTONE_DAYS = 60;
@@ -138,6 +139,7 @@
         .map((s) => ({ id: String(s.id || uuid()), text: String(s.text).slice(0, 200), done: Boolean(s.done) })),
       updated_at: t.updated_at || EPOCH,
     };
+    if (Due.valid(t.due)) o.due = String(t.due);
     if (t.link && t.link.r) o.link = { s: String(t.link.s || ""), r: String(t.link.r), x: String(t.link.x || ""), c: String(t.link.c || ""), d: Boolean(t.link.d) };
     if (t.routine_id) { o.routine_id = String(t.routine_id); o.routine_item = String(t.routine_item || ""); }
     if (t.deleted) o.deleted = true;
@@ -262,9 +264,31 @@
   const catById = (id) => liveCats().find((c) => c.id === id);
   const taskById = (id) => liveTasks().find((t) => t.id === id);
   const effRank = { hard: 0, medium: 1, light: 2 };
-  const todayOpen = () => liveTasks().filter((t) => t.status === "today").sort((a, b) => effRank[a.effort] - effRank[b.effort] || a.pos - b.pos);
+  /* ---------- Termíny ---------- */
+  const LANE_RANK = { fire: 0, prio: 1, wait: 2 };
+  /** Termín, podle kterého se úkol řadí: vlastní, nebo termín podmínky předmětu ve Studiu. */
+  const effDue = (t) => dueOf(t) || (Due.valid(t.due) ? t.due : "");
+  /** V zásobníku hoří úkol, jehož termín je za dva dny a méně nebo už uplynul. Ruční volba skupiny se tím nemění. */
+  const isAutoFire = (t, due = effDue(t), today = dayKey()) => t.status === "backlog" && Due.isFire(due, today);
+  const effLane = (t, due, today) => (isAutoFire(t, due, today) ? "fire" : laneOf(t));
+
+  /** Nejdřív nejbližší termín (bez termínu až na konec), pak skupina Hoří, Priorita, Počká, pak `tie`, pak pořadí. */
+  function urgencySort(list, tie) {
+    const today = dayKey();
+    const rows = list.map((t) => { const due = effDue(t); return { t, due, lane: LANE_RANK[effLane(t, due, today)] }; });
+    rows.sort((a, b) => Due.compare(a.due, b.due) || a.lane - b.lane || (tie ? tie(a.t, b.t) : 0) || byPos(a.t, b.t));
+    return rows.map((r) => r.t);
+  }
+
+  /** Dnes: co má termín dnes nebo dřív, jde první; potom podle náročnosti. */
+  function todayOpen() {
+    const today = dayKey();
+    const rows = liveTasks().filter((t) => t.status === "today").map((t) => { const d = effDue(t); return { t, hot: d && Due.diff(d, today) <= 0 ? 0 : 1 }; });
+    rows.sort((a, b) => a.hot - b.hot || effRank[a.t.effort] - effRank[b.t.effort] || a.t.pos - b.t.pos);
+    return rows.map((r) => r.t);
+  }
   const doneToday = () => liveTasks().filter((t) => t.status === "done" && isToday(t.done_at)).sort((a, b) => new Date(b.done_at) - new Date(a.done_at));
-  const backlogOf = (cid) => liveTasks().filter((t) => t.status === "backlog" && t.category_id === cid).sort(byPos);
+  const backlogOf = (cid) => urgencySort(liveTasks().filter((t) => t.status === "backlog" && t.category_id === cid));
 
   function persist() {
     store.set(K.data, state);
@@ -492,7 +516,8 @@
     const box = (on) => h("span", { class: "pr-box" + (on ? " pr-on" : ""), "aria-hidden": "true" });
     const row = (t) => {
       const done = t.status === "done";
-      const meta = [done ? "hotovo" : t.status === "today" ? "dnes" : null, EFFORT_LABEL[t.effort]].filter(Boolean).join(" · ");
+      const due = done ? "" : effDue(t);
+      const meta = [done ? "hotovo" : t.status === "today" ? "dnes" : null, due ? `termín ${Due.short(due, dayKey())}` : null, EFFORT_LABEL[t.effort]].filter(Boolean).join(" · ");
       const li = h("li", { class: done ? "pr-done" : "" },
         h("div", { class: "pr-line" }, box(done), h("span", { class: "pr-text" }, t.text), h("span", { class: "pr-meta" }, meta)));
       if (withSteps && t.steps.length) {
@@ -504,8 +529,8 @@
     };
     for (const c of cats) {
       const mine = tasks.filter((t) => t.category_id === c.id);
-      const open = mine.filter((t) => t.status !== "done")
-        .sort((x, y) => (x.status === "today" ? 0 : 1) - (y.status === "today" ? 0 : 1) || byPos(x, y));
+      const sorted = urgencySort(mine.filter((t) => t.status !== "done"));
+      const open = [...sorted.filter((t) => t.status === "today"), ...sorted.filter((t) => t.status !== "today")];
       const done = withDone ? mine.filter((t) => t.status === "done").sort((x, y) => new Date(y.done_at || 0) - new Date(x.done_at || 0)) : [];
       if (!open.length && !done.length) continue;
       root.append(h("section", { class: "pr-sec" }, h("h2", null, c.name), h("ul", { class: "pr-list" }, ...open.map(row), ...done.map(row))));
@@ -540,6 +565,26 @@
     setLane(id, lane) {
       if (!LANES.includes(lane)) return;
       commit((s) => { const t = s.tasks.find((x) => x.id === id); if (t) t.lane = lane; }, `Přesunuto: ${LANE_LABEL[lane]}.`);
+    },
+    /** Termín vlastního úkolu. U úkolu ze Studia ho určuje předmět (mění se v úpravě úkolu). */
+    setDue(id, due) {
+      commit((s) => {
+        const t = s.tasks.find((x) => x.id === id);
+        if (!t || findStudyReq(t, s)) return;
+        if (due) t.due = due; else delete t.due;
+      }, due ? `Termín: ${Due.relative(due, dayKey()).toLowerCase()}.` : "Termín smazán.");
+    },
+    /** Hromadné přeplánování. Úkoly ze Studia se přeskočí, jejich termín patří předmětu. */
+    postponeMany(ids, due) {
+      const n = ids.map(taskById).filter((t) => t && !findStudyReq(t)).length;
+      if (!n) return;
+      commit((s) => {
+        for (const id of ids) {
+          const t = s.tasks.find((x) => x.id === id && !x.deleted);
+          if (!t || findStudyReq(t, s)) continue;
+          if (due) t.due = due; else delete t.due;
+        }
+      }, due ? `Termíny posunuty (${n}): ${Due.relative(due, dayKey()).toLowerCase()}.` : `Termíny smazány (${n}).`);
     },
     remove(id) {
       commit((s) => { const t = s.tasks.find((x) => x.id === id); t.deleted = true; }, "Úkol smazán.");
@@ -576,7 +621,7 @@
         const base = Date.now();
         todo.forEach((st, i) => s.tasks.push({
           id: uuid(), category_id: t.category_id, text: st.text, status: t.status === "done" ? "backlog" : t.status,
-          done_at: null, pos: base + i, effort: "light", steps: [], updated_at: nowIso(),
+          done_at: null, pos: base + i, effort: "light", steps: [], updated_at: nowIso(), ...(Due.valid(t.due) ? { due: t.due } : {}),
         }));
         t.deleted = true;
       }, `Rozděleno na ${todo.length} ${plural(todo.length, "úkol", "úkoly", "úkolů")}.`);
@@ -804,6 +849,7 @@
     else if (ROUTE.name === "studium") renderStudy();
     else renderCat();
     renderComposerOptions();
+    refreshDuePresets();
     setTitle();
 
     if (focusKey) {
@@ -841,7 +887,7 @@
   /* ---------- Lístek ---------- */
   const TODAY_LIMIT = 5, COL_LIMIT = 6, LANE_LIMIT = 8;
   const openNotes = new Map();          // id úkolu → rozbalen?
-  const ui = { allToday: false, allBack: {}, allLane: {}, backView: store.get("stickies:backview", "lanes") === "cats" ? "cats" : "lanes" };
+  const ui = { allToday: false, allBack: {}, allLane: {}, allTime: {}, backView: ["time", "lanes", "cats"].includes(store.get("stickies:backview:v2", "time")) ? store.get("stickies:backview:v2", "time") : "time" };
   let pendingFocus = null;
 
   const isOpenNote = (t, o) => t.status !== "done" && (openNotes.has(t.id) ? openNotes.get(t.id) : Boolean(o.now && t.steps.length));
@@ -880,6 +926,16 @@
     return panel;
   }
 
+  /** Štítek s termínem. Úkol z rutiny nebo hotový úkol ho nemá. Uplynulý termín je teplý, ne červený. */
+  function dueChip(t) {
+    if (t.status === "done") return null;
+    const due = effDue(t);
+    if (!due) return null;
+    const today = dayKey();
+    return h("span", { class: `chip chip-due due-${Due.tone(due, today)}`, title: `Termín: ${Due.full(due)}` },
+      icon("calendar"), h("span", null, Due.relative(due, today)));
+  }
+
   function noteEl(t, mode, o = {}) {
     const c = catById(t.category_id) || { color: "violet", name: "?" };
     const done = t.status === "done";
@@ -907,6 +963,8 @@
     const foot = h("div", { class: "note-foot" });
     if (!o.hideCat) foot.append(h("span", { class: "chip" }, c.name));
     if (t.routine_id) foot.append(h("span", { class: "chip chip-routine", title: "Úkol z rutiny" }, icon("repeat"), h("span", { class: "sr-only" }, "Z rutiny")));
+    const dc = dueChip(t);
+    if (dc) foot.append(dc);
     foot.append(h("span", { class: `eff eff-${t.effort}`, title: EFFORT_LABEL[t.effort] + " úkol" },
       h("i"), h("i"), h("i"), h("span", { class: "sr-only" }, EFFORT_LABEL[t.effort])));
     if (!done && (t.steps.length || !flag || open)) {
@@ -921,11 +979,14 @@
     if (done && t.done_at) foot.append(h("span", { class: "time" }, isToday(t.done_at) ? fmtTime(t.done_at) : fmtDate(t.done_at)));
     if (fits) foot.append(h("span", { class: "chip chip-fit" }, "Sedí na dnes"));
     if (mode === "backlog" && o.lanePick) {
+      const auto = isAutoFire(t);
+      const lane = auto ? "fire" : laneOf(t);
       const sel = h("select", {
-        class: `lane-sel lane-${laneOf(t)}`, "aria-label": `Skupina lístku: ${t.text}`, title: "Hoří deadline, Priorita nebo Počká", "data-k": "lane:" + t.id,
+        class: `lane-sel lane-${lane}`, "aria-label": `Skupina lístku: ${t.text}`, disabled: auto, "data-k": "lane:" + t.id,
+        title: auto ? "Hoří samo podle termínu. Po posunutí termínu se vrátí do zvolené skupiny." : "Hoří, Priorita nebo Počká",
         on: { click: (e) => e.stopPropagation(), change: (e) => { e.stopPropagation(); act.setLane(t.id, e.target.value); } },
       }, ...LANES.map((k) => h("option", { value: k }, LANE_LABEL[k])));
-      sel.value = laneOf(t);
+      sel.value = lane;
       foot.append(sel);
     }
 
@@ -937,6 +998,7 @@
       tools.append(iconBtn("play", "Soustředit se na tenhle úkol", () => openFocus(t.id), "focus:" + t.id));
       tools.append(iconBtn("undo", "Vrátit do zásobníku", () => act.toBacklog(t.id), "back:" + t.id));
     }
+    if (!done) tools.append(iconBtn("calendar", effDue(t) ? "Změnit termín" : "Nastavit termín", () => openEdit(t.id, { due: true }), "due:" + t.id));
     if (!done) tools.append(iconBtn("edit", "Upravit", () => openEdit(t.id), "edit:" + t.id));
     tools.append(iconBtn("trash", "Smazat", () => act.remove(t.id), "del:" + t.id));
     foot.append(tools);
@@ -996,6 +1058,7 @@
     $("count-today").textContent = open.length;
     $("count-done").textContent = done.length;
 
+    renderDeadlineDue();
     renderRoutineDue();
     renderTodayList(open);
     fillList($("done-list"), done, "done", emptyEl("Zatím nic hotového", "Co dokončíš, se objeví tady."), {});
@@ -1161,25 +1224,82 @@
     return new Set(ev.over === 0 ? ev.need : []);
   }
 
-  /** Rozhodovat se je náročné: vybere úkol, který se k dnešku hodí. */
+  /** Rozhodovat se je náročné: vybere úkol. Když něco hoří, vybere nejnaléhavější, co se hodí k dnešku. */
   function pickForMe() {
     const back = liveTasks().filter((t) => t.status === "backlog");
     if (!back.length) { toast("Zásobník je prázdný. Přidej úkol a pak ti pomůžu vybrat."); return; }
     const fit = fitSet();
-    let pool = back.filter((t) => fit.has(t.effort));
-    if (!pool.length) pool = back.filter((t) => t.effort === "light");
-    if (!pool.length) pool = back;
-    const t = pool[Math.floor(Math.random() * pool.length)];
-    commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Vybráno na dnes: ${t.text}`);
+    const today = dayKey();
+    const hot = urgencySort(back.filter((t) => Due.isFire(effDue(t), today)));
+    let t, why = "";
+    if (hot.length) {
+      t = hot.find((x) => fit.has(x.effort)) || hot[0];
+      why = ` (termín: ${Due.relative(effDue(t), today).toLowerCase()})`;
+    } else {
+      let pool = back.filter((x) => fit.has(x.effort));
+      if (!pool.length) pool = back.filter((x) => x.effort === "light");
+      if (!pool.length) pool = back;
+      t = pool[Math.floor(Math.random() * pool.length)];
+    }
+    commit((s) => { const x = s.tasks.find((y) => y.id === t.id); x.status = "today"; x.pos = Date.now(); }, `Vybráno na dnes: ${t.text}${why}`);
   }
   $("pick-me").addEventListener("click", pickForMe);
 
+  const BACK_VIEWS = [["time", "Termíny", "Řadit podle termínů"], ["lanes", "Skupiny", "Řadit podle skupin Hoří, Priorita, Počká"], ["cats", "Kategorie", "Řadit podle kategorií"]];
+  const BACK_HINT = {
+    time: "Nahoře je to, co má termín nejdřív. Klepnutím na lístek ho přesuneš na dnes, termín změníš ikonou kalendáře. Co termín nemá, řadí skupina Hoří, Priorita nebo Počká.",
+    lanes: "Klepnutím na lístek ho přesuneš do dnešních priorit. Skupina Hoří se plní sama podle termínu (dva dny a méně), ostatní skupiny volíš výběrem přímo na lístku.",
+    cats: "Lístky jsou po kategoriích a v každé řazené podle termínu. Klepnutím na lístek ho přesuneš do dnešních priorit.",
+  };
+
   function renderBackView() {
     const box = $("back-view");
-    box.replaceChildren(...[["lanes", "Podle skupin"], ["cats", "Podle kategorií"]].map(([v, l]) => h("button", {
-      type: "button", class: "seg-btn", "aria-pressed": String(ui.backView === v), "data-k": "bview:" + v,
-      on: { click: () => { ui.backView = v; store.set("stickies:backview", v); render(); } },
+    box.replaceChildren(...BACK_VIEWS.map(([v, l, tip]) => h("button", {
+      type: "button", class: "seg-btn", "aria-pressed": String(ui.backView === v), "data-k": "bview:" + v, title: tip,
+      on: { click: () => { ui.backView = v; store.set("stickies:backview:v2", v); render(); } },
     }, l)));
+    $("back-hint").textContent = BACK_HINT[ui.backView];
+  }
+
+  /** Kolik lístků ukázat v které skupině, než se zbytek schová za tlačítko. */
+  const TIME_LIMIT = { overdue: 12, today: 12, tomorrow: 8, week: 6, next: 6, later: 6, none: 6 };
+
+  /** Přeplánování všech uplynulých úkolů jedním výběrem. */
+  function bulkSelect(list) {
+    const movable = list.filter((t) => !findStudyReq(t));
+    if (!movable.length) return null;
+    return h("select", {
+      class: "dl-bulk", "aria-label": "Posunout termíny všech úkolů ve skupině Termín uplynul",
+      on: { change: (e) => {
+        const v = e.target.value;
+        e.target.value = "";
+        if (v) act.postponeMany(movable.map((t) => t.id), v === "none" ? "" : v);
+      } },
+    }, h("option", { value: "" }, `Posunout vše (${movable.length})…`),
+      ...Due.presets(dayKey()).map((p) => h("option", { value: p.value }, p.label)),
+      h("option", { value: "none" }, "Smazat termíny"));
+  }
+
+  function renderTimeView(grid, back, order, fit) {
+    const today = dayKey();
+    const groups = Object.fromEntries(Due.BUCKETS.map((b) => [b, []]));
+    for (const t of back) groups[Due.bucket(effDue(t), today)].push(t);
+    const tie = (x, y) => order.get(x.category_id) - order.get(y.category_id);
+    const secs = Due.BUCKETS.filter((b) => groups[b].length).map((b) => {
+      const list = urgencySort(groups[b], tie);
+      const limit = TIME_LIMIT[b], all = Boolean(ui.allTime[b]);
+      const meta = Due.GROUPS[b], range = Due.range(b, today);
+      const head = h("div", { class: "cat-head dl-head" },
+        h("span", { class: "dl-dot" }), h("h3", { id: `dl-h-${b}` }, meta.label), h("span", { class: "count" }, String(list.length)),
+        range ? h("span", { class: "dl-range" }, range) : null);
+      if (b === "overdue") head.append(bulkSelect(list));
+      const notes = h("div", { class: "notes" });
+      fillList(notes, all ? list : list.slice(0, limit), "backlog", null, (t) => ({ fits: fit.has(t.effort), lanePick: b === "none" }));
+      if (list.length > limit) notes.append(moreBtn("t" + b, all, list.length - limit, () => { ui.allTime[b] = !all; render(); }));
+      return h("section", { class: `dl-group dl-${b}`, "aria-labelledby": `dl-h-${b}`, "data-bucket": b },
+        head, meta.hint && (b === "overdue" || b === "none") ? h("p", { class: "lane-hint" }, meta.hint) : null, notes);
+    });
+    grid.replaceChildren(...secs);
   }
 
   function renderBacklog() {
@@ -1188,12 +1308,20 @@
     $("count-backlog").textContent = total;
     renderBackView();
     const grid = $("backlog-grid");
+    grid.className = ui.backView === "time" ? "dl-list" : "cat-grid";
     if (!cats.length) {
       grid.replaceChildren(emptyEl("Zatím tu není žádná kategorie", "Kategorie jsou tvoje stránky v boční liště, třeba Práce, Studium nebo Domácnost.",
         h("button", { class: "btn btn-primary", type: "button", on: { click: () => openCatDialog() } }, "Vytvořit kategorii")));
       return;
     }
     const fit = fitSet();
+    const order = new Map(cats.map((c, i) => [c.id, i]));
+    const back = liveTasks().filter((t) => t.status === "backlog" && order.has(t.category_id));
+    if (ui.backView === "time") {
+      if (!back.length) { grid.replaceChildren(emptyEl("Zásobník je prázdný", "Přidej první úkol, třeba i s termínem.")); return; }
+      renderTimeView(grid, back, order, fit);
+      return;
+    }
     if (ui.backView === "cats") {
       grid.replaceChildren(...cats.map((c) => {
         const list = backlogOf(c.id);
@@ -1214,14 +1342,10 @@
       }));
       return;
     }
-    const order = new Map(cats.map((c, i) => [c.id, i]));
-    const back = liveTasks().filter((t) => t.status === "backlog" && order.has(t.category_id));
+    const today = dayKey();
     grid.replaceChildren(...LANES.map((ln) => {
-      const list = back.filter((t) => laneOf(t) === ln).sort((x, y) => {
-        const dx = dueOf(x), dy = dueOf(y);
-        if (dx !== dy) return !dx ? 1 : !dy ? -1 : dx < dy ? -1 : 1;      // nejdřív nejbližší termín, bez termínu až potom
-        return order.get(x.category_id) - order.get(y.category_id) || byPos(x, y);
-      });
+      const rows = back.filter((t) => effLane(t, effDue(t), today) === ln);
+      const list = urgencySort(rows, (x, y) => order.get(x.category_id) - order.get(y.category_id));
       const all = Boolean(ui.allLane[ln]);
       const shown = all ? list : list.slice(0, LANE_LIMIT);
       const col = h("section", { class: `cat-col lane lane-${ln}` });
@@ -1263,6 +1387,27 @@
       h("span", null, h("span", { class: "eff", "aria-hidden": "true" }, h("i"), h("i"), h("i")), EFFORT_LABEL[k]))));
   }
   const segValue = (box) => { const r = box.querySelector("input:checked"); return r ? r.value : "medium"; };
+
+  /** Rychlé volby termínu (Dnes, Zítra, …) vedle políčka s datem. Vrací funkci, která je znovu sestaví podle dnešního dne. */
+  function bindDuePresets(box, input) {
+    const paint = () => qa("button", box).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === input.value)));
+    const fill = (v) => { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); };
+    input.addEventListener("input", paint);
+    input.addEventListener("change", paint);
+    return () => {
+      box.replaceChildren(
+        ...Due.presets(dayKey()).map((p) => h("button", { type: "button", class: "preset", "data-v": p.value, on: { click: () => fill(p.value) } }, p.label)),
+        h("button", { type: "button", class: "preset", "data-v": "", on: { click: () => fill("") } }, "Bez termínu"));
+      paint();
+    };
+  }
+  const buildAddDue = bindDuePresets($("add-due-presets"), $("add-due"));
+  const buildEditDue = bindDuePresets($("edit-due-presets"), $("edit-due"));
+  let presetsDay = "";
+  function refreshDuePresets() {
+    const d = dayKey();
+    if (presetsDay !== d) { presetsDay = d; buildAddDue(); }
+  }
 
   let compSig = "";
   function renderComposerOptions() {
@@ -1306,13 +1451,16 @@
     if (!cid) { toast("Nejdřív vytvoř kategorii."); openCatDialog(); return; }
     const effort = segValue($("add-effort"));
     const today = $("add-today").checked;
+    const due = Due.valid($("add-due").value) ? $("add-due").value : "";
     const id = uuid();
     store.set(K.lastcat, cid);
     commit((s) => {
-      s.tasks.push({ id, category_id: cid, text, status: today ? "today" : "backlog", done_at: null, pos: Date.now(), effort, steps: [], updated_at: nowIso() });
-    }, today ? "Přidáno na dnes." : "Přidáno do zásobníku.", effort === "hard"
+      s.tasks.push({ id, category_id: cid, text, status: today ? "today" : "backlog", done_at: null, pos: Date.now(), effort, steps: [], updated_at: nowIso(), ...(due ? { due } : {}) });
+    }, (today ? "Přidáno na dnes." : "Přidáno do zásobníku.") + (due ? ` Termín: ${Due.relative(due, dayKey()).toLowerCase()}.` : ""), effort === "hard"
       ? { action: { label: "Rozepsat", fn: () => openEdit(id, { steps: true }) }, ms: 8000 } : {});
     $("add-text").value = "";
+    $("add-due").value = "";
+    $("add-due").dispatchEvent(new Event("input"));
     buildSeg($("add-effort"), "add-effort", "medium");
     $("add-text").focus();
   });
@@ -1397,20 +1545,36 @@
     $("edit-lane").replaceChildren(...LANES.map((k) => h("option", { value: k }, LANE_LABEL[k])));
     $("edit-lane").value = laneOf(t);
     const lr = findStudyReq(t);
-    $("edit-due-field").hidden = !lr;
+    $("edit-due-label").textContent = lr ? "Termín z předmětu" : "Termín";
     $("edit-due").required = Boolean(lr) && lr.st.taskMode !== "all";
-    $("edit-due").value = lr ? lr.r.due || "" : "";
+    $("edit-due").value = lr ? lr.r.due || "" : Due.valid(t.due) ? t.due : "";
+    $("edit-due-presets").hidden = Boolean(lr);
+    if (!lr) buildEditDue();
     $("edit-due-hint").textContent = !lr ? "" : lr.st.taskMode === "all"
       ? "Změna se propíše i do předmětu ve Studiu."
       : "Změna se propíše i do předmětu ve Studiu. Termín tu nejde smazat, lístky vznikají jen z podmínek s termínem. Smazat ho můžeš ve Studiu.";
+    paintEditLane();
     $("steps-list").replaceChildren(...t.steps.map(stepRow));
     stepsHint(t.effort);
     const dlg = $("edit-dialog");
     if (!dlg.open) dlg.showModal();
     if (opts.steps) {
       if (!t.steps.length) addStep(null); else $("steps-list").querySelector("input").focus();
-    } else $("edit-text").focus();
+    } else if (opts.due) $("edit-due").focus();
+    else $("edit-text").focus();
   }
+
+  /** Skupina Hoří se u zásobníku plní sama podle termínu, ruční volba se tehdy zamkne. */
+  function paintEditLane() {
+    const t = taskById(editId);
+    const lr = t ? findStudyReq(t) : null;
+    const due = lr ? (lr.r.due || "") : $("edit-due").value;
+    const auto = Boolean(t) && t.status === "backlog" && Due.isFire(due, dayKey());
+    $("edit-lane").disabled = auto;
+    $("edit-lane-hint").textContent = auto ? "Termín je za dva dny a méně nebo uplynul, proto lístek hoří sám. Po posunutí termínu se vrátí do zvolené skupiny." : "";
+  }
+  $("edit-due").addEventListener("input", paintEditLane);
+  $("edit-due").addEventListener("change", paintEditLane);
 
   $("edit-effort").addEventListener("change", () => stepsHint(segValue($("edit-effort"))));
   $("step-add").addEventListener("click", () => addStep(null));
@@ -1430,15 +1594,18 @@
       .map((r) => ({ id: r.dataset.id, text: r.querySelector("input").value.trim(), done: r.dataset.done === "1" }))
       .filter((s) => s.text);
     const cat = $("edit-cat").value, effort = segValue($("edit-effort")), lane = $("edit-lane").value;
-    const dueField = !$("edit-due-field").hidden, due = $("edit-due").value;
+    const due = Due.valid($("edit-due").value) ? $("edit-due").value : "";
+    const laneLocked = $("edit-lane").disabled;
     let dueChanged = false;
     commit((s) => {
       const t = s.tasks.find((x) => x.id === editId);
       if (!t) return;
       t.text = text; t.category_id = cat; t.effort = effort; t.steps = steps;
-      if (LANES.includes(lane)) t.lane = lane;
-      const lr = dueField ? findStudyReq(t, s) : null;
-      if (lr && (lr.r.due || "") !== due) { lr.r.due = due; dueChanged = true; }
+      if (!laneLocked && LANES.includes(lane)) t.lane = lane;
+      const lr = findStudyReq(t, s);
+      if (lr) { if ((lr.r.due || "") !== due) { lr.r.due = due; dueChanged = true; } }
+      else if (due) t.due = due;
+      else delete t.due;
     }, null);
     if (dueChanged) toast("Termín je změněný i v předmětu.");
     $("edit-dialog").close();
@@ -1558,6 +1725,32 @@
 
   function snoozeRoutine(id) {
     commit((s) => { s.routines.find((x) => x.id === id).snooze = addDays(dayKey(), 1); }, "Připomenu to zítra.");
+  }
+
+  const DEADLINE_SHOWN = 3;
+  /** Karta na Dnes: úkoly ze zásobníku, kterým termín hoří (dva dny a méně nebo uplynul). */
+  function renderDeadlineDue() {
+    const box = $("deadline-due");
+    const today = dayKey();
+    const hot = urgencySort(liveTasks().filter((t) => t.status === "backlog" && Due.isFire(effDue(t), today)));
+    box.hidden = !hot.length;
+    if (!hot.length) { box.replaceChildren(); return; }
+    const tomorrow = Due.add(today, 1);
+    const rows = hot.slice(0, DEADLINE_SHOWN).map((t) => {
+      const c = catById(t.category_id) || { color: "violet", name: "?" };
+      const due = effDue(t);
+      const own = !findStudyReq(t);
+      return h("div", { class: `due-row c-${c.color}`, "data-k": "dl:" + t.id },
+        h("span", { class: "due-ic", "aria-hidden": "true" }, icon("calendar")),
+        h("div", { class: "due-txt" },
+          h("b", null, t.text),
+          h("span", null, `${c.name} · ${Due.tone(due, today) === "overdue" ? "termín uplynul" : "termín"}: ${Due.relative(due, today).toLowerCase()}`)),
+        h("button", { type: "button", class: "btn btn-sm due-add", "data-k": "dl-today:" + t.id, on: { click: () => act.toToday(t.id) } }, "Na dnes"),
+        own && due < tomorrow
+          ? h("button", { type: "button", class: "btn btn-sm btn-ghost due-later", "data-k": "dl-tomorrow:" + t.id, on: { click: () => act.setDue(t.id, tomorrow) } }, "Zítra") : null);
+    });
+    if (hot.length > DEADLINE_SHOWN) rows.push(h("a", { class: "due-more", href: "#/zasobnik" }, `Další blížící se termíny: ${hot.length - DEADLINE_SHOWN}`));
+    box.replaceChildren(h("p", { class: "dl-card-title" }, "Blíží se termíny"), ...rows);
   }
 
   function renderRoutineDue() {

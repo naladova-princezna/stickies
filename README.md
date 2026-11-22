@@ -40,13 +40,22 @@ V SQL Editoru ve Supabase: `insert into public.allowed_emails (email) values ('j
 
 ## 4. Jak se s tím pracuje
 - **Dnes**: dnešní priority (nahoře karta **Teď**), hotovo dnes a **Stav dne**.
-- **Zásobník**: lístky jsou ve třech skupinách **Hoří deadline**, **Priorita** a **Počká**. Skupinu měníš výběrem přímo na lístku nebo v *Upravit úkol*. Nová skupina je vždy Počká. Uvnitř skupiny jsou nahoře lístky s nejbližším termínem, pak podle kategorie. Přepínač nahoře vrátí původní pohled po kategoriích. Je tu i **Vyber za mě** a v každé skupině nejvýš 8 lístků a tlačítko pro zbytek.
+- **Zásobník**: tři pohledy, které se přepínají nahoře. **Termíny** (výchozí) řadí lístky do skupin podle termínu: *Termín uplynul*, *Dnes*, *Zítra*, *Tento týden*, *Příští týden*, *Později* a *Bez termínu*. Týden začíná pondělím. Uvnitř skupiny jsou nahoře lístky s nejbližším termínem, pak skupina Hoří, Priorita, Počká, pak kategorie. Každá skupina ukáže jen pár lístků a zbytek je za tlačítkem. **Skupiny** a **Kategorie** zůstaly jako dřív, jen je v nich všude řazení podle termínu. V pohledu Skupiny se *Hoří* plní samo: patří tam úkol, jehož termín je za dva dny a méně nebo už uplynul. Ruční výběr skupiny se u něj zamkne a po posunutí termínu se vrátí. Je tu i **Vyber za mě**: když něco hoří, vybere nejnaléhavější úkol, který se hodí k dnešní energii.
 - **Rutiny**: opakující se seznamy úkolů (viz níže).
 - **Vytisknout úkoly** (tlačítko ve spodu postranního panelu): vytiskne úkoly ze všech kategorií po kategoriích. Volitelně s kroky a s hotovými úkoly. V okně tisku jde zvolit uložení do PDF.
 - **Přehled**: historie energie a vytížení, statistiky a odhad (viz níže).
 - **Kategorie** v boční liště (na mobilu tlačítko *Kategorie*): vlastní stránka. Klávesa **N** otevře přidání úkolu.
 - **Lístky jsou barevné podle kategorie**, i ty hotové (tlumeněji, s barevným pruhem).
 - **Rozepsat / rozbalit**: každý úkol má tlačítko *Rozepsat*. Kroky se píšou rovnou na lístku (Enter = další krok), odškrtávají se a jdou sbalit. *Vložit šablonu kroků* dá čtyři startovní kroky. *Udělat z kroků samostatné úkoly* rozdělí úkol na nezávislé lehké úkoly (jde vrátit tlačítkem Zpět).
+
+### Termíny úkolů
+- Termín (datum) nastavíš při přidání úkolu, v úpravě úkolu nebo ikonou kalendáře na lístku. Rychlé volby: *Dnes*, *Zítra*, *Pondělí*, *Za týden*, *Bez termínu*.
+- Na lístku je štítek s termínem (*Dnes*, *Zítra*, *Za 3 dny*, *Před 2 dny*, jinak datum). Uplynulý termín je zvýrazněný teple, ne červeně, a hlášky zůstávají laskavé.
+- Úkoly ze Studia mají termín podle předmětu. Mění se jen v úpravě úkolu (propíše se do Studia) nebo ve Studiu.
+- Skupina **Termín uplynul** má volbu *Posunout vše*: přeplánuje všechny vlastní úkoly na dnes, zítra, pondělí nebo za týden, případně termíny smaže. Jde to vrátit tlačítkem Zpět. Úkoly ze Studia se přeskočí.
+- Na stránce **Dnes** je karta *Blíží se termíny* (termín za dva dny a méně nebo uplynulý) s tlačítky *Na dnes* a *Zítra*. Dnešní úkoly s termínem dnes a dřív jsou nahoře.
+- Tisk úkolů uvádí termíny a řadí podle nich.
+- Logika termínů je v `due.js` (čisté funkce) a testuje se: `TZ=Europe/Prague node tests/due.test.js`.
 
 ### Stav dne a doporučení
 Zadáš energii a vytížení dne (rychle přes předvolby nebo posuvníkem). Aplikace spočítá kapacitu v bodech (lehký 1, střední 2, náročný 4) a řekne, kolik úkolů a jakých dnes dává smysl, co se ještě vejde a kdy je plán přeplněný. V zásobníku označí lístky, které se k dnešku hodí. Je to pomůcka, ne diagnóza. Konstanty se dají upravit v `plan.js` (`CFG`).
@@ -109,6 +118,7 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | Soubor | K čemu |
 |---|---|
 | `index.html`, `style.css`, `app.js` | Aplikace |
+| `due.js` | Termíny: skupiny podle data, štítky, rychlé volby (s testy v `tests/`) |
 | `plan.js` | Výpočet doporučení na dnes |
 | `stats.js` | Statistiky a odhad energie |
 | `studium.html`, `studium.js`, `studium.css` | Stránka Studium (studia, předměty, deadliny, zápisy, závěrečná práce) |
