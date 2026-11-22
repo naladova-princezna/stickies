@@ -1,11 +1,11 @@
 /* Service worker: aplikace se otevře i bez internetu.
    Soubory aplikace: nejdřív síť (vždy čerstvá verze), při výpadku cache.
    Písma: z cache, na pozadí se obnovují.
-   Požadavky na api.github.com se nezasahují. */
+   Požadavky na Supabase (jiný původ) se nezasahují. */
 
-const VERSION = "stickies-v13";
+const VERSION = "stickies-v14";
 const SHELL = [
-  "./", "index.html", "style.css", "plan.js", "stats.js", "users.js", "app.js", "studium.html", "studium.css", "studium.js", "manifest.webmanifest",
+  "./", "index.html", "style.css", "plan.js", "stats.js", "cloud.js", "app.js", "studium.html", "studium.css", "studium.js", "manifest.webmanifest",
   "icons/favicon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 

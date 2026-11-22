@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Stickies – úkoly</title>
-  <meta name="description" content="Úkoly ve stylu sticky notes s ohledem na tvoji energii. Data v soukromém repozitáři na GitHubu.">
+  <meta name="description" content="Úkoly ve stylu sticky notes s ohledem na tvoji energii. Data v cloudu za přihlášením.">
   <meta name="theme-color" content="#080818">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -58,16 +58,23 @@
 
   <!-- ========== PŘIHLÁŠENÍ ========== -->
   <main id="login" class="login" hidden>
-    <form id="login-form" class="login-card" autocomplete="on">
+    <form id="login-form" class="login-card" autocomplete="on" novalidate>
       <div class="login-brand">
         <span class="logo logo-lg"><svg class="i"><use href="#i-tick"/></svg></span>
-        <div><p class="eyebrow" style="margin:0">Stickies</p><h1 class="login-title">Kdo jsi?</h1></div>
+        <div><p class="eyebrow" style="margin:0">Stickies</p><h1 id="login-title" class="login-title">Přihlášení</h1></div>
       </div>
-      <div class="field"><label for="login-user">Uživatelské jméno</label>
-        <input id="login-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="go"></div>
+      <div class="field" id="login-email-wrap"><label for="login-email">E-mail</label>
+        <input id="login-email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" enterkeyhint="next"></div>
+      <div class="field" id="login-pass-wrap"><label for="login-pass">Heslo</label>
+        <input id="login-pass" type="password" autocomplete="current-password" spellcheck="false" enterkeyhint="go"></div>
       <p id="login-error" class="form-error" role="alert"></p>
-      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Otevřít moje úkoly</button>
-      <p class="fine">Po přihlášení se úkoly samy načtou. Na tomto zařízení zůstaneš přihlášená.</p>
+      <p id="login-info" class="fine" role="status"></p>
+      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Přihlásit se</button>
+      <div class="login-alt">
+        <button id="login-mode-up" class="btn" type="button">Vytvořit účet</button>
+        <button id="login-forgot" class="btn" type="button">Zapomenuté heslo</button>
+      </div>
+      <p class="fine">Účet si mohou vytvořit jen pozvané e-maily. Na tomto zařízení zůstaneš přihlášená.</p>
     </form>
   </main>
 
@@ -425,49 +432,17 @@
   <dialog id="store-dialog" aria-labelledby="store-title">
     <form id="store-form" novalidate>
       <div class="dlg-head">
-        <h2 id="store-title">Úložiště a záloha</h2>
+        <h2 id="store-title">Účet a záloha</h2>
         <button type="button" class="icon-btn" data-close aria-label="Zavřít"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <p id="st-status" class="st-status"></p>
 
-      <div id="st-form-block" class="st-block">
-        <p class="muted">Data se ukládají do <b>soukromého</b> repozitáře na GitHubu. Na každém zařízení se připojíš jednou.</p>
-        <div class="field">
-          <label for="st-repo">Repozitář (vlastník/název)</label>
-          <input id="st-repo" type="text" placeholder="magda/stickies-data" autocomplete="off" autocapitalize="none" spellcheck="false">
-        </div>
-        <div class="field">
-          <label for="st-token">Přístupový token</label>
-          <input id="st-token" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
-        </div>
-        <details class="adv">
-          <summary>Rozšířené</summary>
-          <div class="two">
-            <div class="field"><label for="st-path">Soubor</label><input id="st-path" type="text" value="stickies-data.json" autocomplete="off" spellcheck="false"></div>
-            <div class="field"><label for="st-branch">Větev (prázdné = výchozí)</label><input id="st-branch" type="text" autocomplete="off" spellcheck="false"></div>
-          </div>
-        </details>
-        <details class="adv">
-          <summary>Jak token vytvořit</summary>
-          <ol class="howto">
-            <li>Na GitHubu založ <b>soukromý</b> (Private) repozitář, třeba <code>stickies-data</code>. Zaškrtni „Add a README file“, ať v repozitáři něco je.</li>
-            <li>Otevři <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token</b>.</li>
-            <li><b>Repository access:</b> Only select repositories → vyber jen ten datový repozitář.</li>
-            <li><b>Permissions → Repository → Contents:</b> Read and write.</li>
-            <li>Token zkopíruj a vlož sem. GitHub ho ukáže jen jednou.</li>
-          </ol>
-        </details>
-        <p id="st-error" class="form-error" role="alert"></p>
-        <button id="st-connect" class="btn btn-primary btn-block" type="submit">Připojit</button>
-      </div>
-
       <div id="st-connected-block" class="st-block" hidden>
         <div class="st-actions">
           <button id="st-sync" class="btn" type="button">Synchronizovat teď</button>
-          <button id="st-disconnect" class="btn btn-danger" type="button">Odpojit toto zařízení</button>
           <button id="st-logout" class="btn btn-danger" type="button" hidden>Odhlásit se</button>
         </div>
-        <p id="st-conn-note" class="fine-left">Odpojení smaže z tohoto zařízení token. Data v repozitáři i lokální kopie zůstávají.</p>
+        <p id="st-conn-note" class="fine-left"></p>
       </div>
 
       <div class="st-block st-backup">
@@ -542,7 +517,7 @@
     <button id="toast-undo" type="button" hidden>Zpět</button>
   </div>
 
-  <script src="users.js"></script>
+  <script src="cloud.js"></script>
   <script src="plan.js"></script>
   <script src="stats.js"></script>
   <script src="app.js"></script>

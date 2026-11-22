@@ -280,10 +280,7 @@
     }
     state = normalize(raw || {});
     meta = Object.assign({ sha: null, dirty: false }, store.get(K.meta, {}));
-    if (!USER) {
-      gh = store.get(K.gh, null);
-      if (gh && !(gh.repo && gh.token)) gh = null;
-    }
+    if (!USER) gh = null;
     if (migrated) { store.set(K.seeded, true); persist(); }
   }
 
@@ -327,17 +324,16 @@
   }
 
   /* =====================================================================
-     Úložiště: soubor v soukromém GitHub repozitáři (Contents API)
+     Úložiště: Supabase (přihlášení + řádek s daty chráněný Row Level Security)
      ===================================================================== */
   const SYNC = {
     local:   ["Jen v tomto zařízení", "warn", "Lokálně"],
     pending: ["Čeká na uložení", "busy", "Ukládání"],
     saving:  ["Ukládám…", "busy", "Ukládám"],
-    ok:      ["Uloženo na GitHubu", "ok", "Uloženo"],
+    ok:      ["Uloženo v cloudu", "ok", "Uloženo"],
     offline: ["Offline · uloží se později", "warn", "Offline"],
     error:   ["Chyba · zkouším znovu", "bad", "Chyba"],
-    auth:    ["Token nefunguje", "bad", "Token"],
-    public:  ["Repozitář je veřejný", "bad", "Veřejný!"],
+    auth:    ["Přihlášení vypršelo", "bad", "Přihlásit"],
   };
   let syncKind = "local", syncDetail = "";
 
@@ -351,78 +347,21 @@
     renderStoreStatus();
   }
 
-  function b64enc(str) {
-    const bytes = new TextEncoder().encode(str);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    return btoa(bin);
-  }
-  function b64dec(b64) {
-    const bin = atob(b64.replace(/\s/g, ""));
-    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
-  }
-
-  class GhError extends Error {
-    constructor(status, message) { super(message); this.status = status; }
-  }
-
-  async function ghReq(method, path, body) {
-    const res = await fetch("https://api.github.com" + path, {
-      method,
-      cache: "no-cache",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: "Bearer " + gh.token,
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    let json = null;
-    try { json = await res.json(); } catch { /* prázdná odpověď */ }
-    if (!res.ok) throw new GhError(res.status, (json && json.message) || res.statusText);
-    return json;
-  }
-
-  const filePath = () => `/repos/${gh.repo}/contents/${gh.path.split("/").map(encodeURIComponent).join("/")}`;
-  const branchQ = () => (gh.branch ? `?ref=${encodeURIComponent(gh.branch)}` : "");
+  const CloudError = window.StickiesCloud ? window.StickiesCloud.CloudError : class extends Error {};
 
   async function ghGetFile() {
-    try {
-      const j = await ghReq("GET", filePath() + branchQ());
-      if (Array.isArray(j) || !j.sha) throw new Error("Cesta k souboru míří na složku.");
-      if (j.encoding !== "base64" || typeof j.content !== "string" || (!j.content && j.size > 0)) {
-        throw new Error("Soubor s daty je příliš velký pro Contents API.");
-      }
-      let data;
-      try { data = JSON.parse(b64dec(j.content)); } catch { throw new Error("Soubor v repozitáři není platný JSON. Nepřepisuji ho."); }
-      return { sha: j.sha, data: normalize(data) };
-    } catch (e) {
-      if (e instanceof GhError && e.status === 404) return null;
-      throw e;
-    }
+    const row = await window.StickiesCloud.getDoc();
+    if (!row) return null;
+    if (!row.data || typeof row.data !== "object" || Array.isArray(row.data)) throw new Error("Data v cloudu nemají očekávaný tvar. Nepřepisuji je.");
+    return { sha: row.rev, data: normalize(row.data) };
   }
 
-  async function ghPutFile(snapshot, sha) {
-    const payload = JSON.stringify({ app: "stickies", v: 3, saved_at: nowIso(), ...snapshot }, null, 1);
-    const body = { message: "Stickies: " + new Date().toISOString().replace("T", " ").slice(0, 16), content: b64enc(payload) };
-    if (sha) body.sha = sha;
-    if (gh.branch) body.branch = gh.branch;
-    try {
-      const j = await ghReq("PUT", filePath(), body);
-      return { sha: j.content.sha };
-    } catch (e) {
-      if (e instanceof GhError && (e.status === 409 || e.status === 422)) return { conflict: true };
-      throw e;
-    }
+  async function ghPutFile(snapshot, rev) {
+    const res = await window.StickiesCloud.putDoc({ app: "stickies", v: 3, saved_at: nowIso(), ...snapshot }, rev == null ? null : rev);
+    return res.conflict ? { conflict: true } : { sha: res.rev };
   }
 
-  async function ghRepoInfo() {
-    return ghReq("GET", `/repos/${gh.repo}`);
-  }
-
-  let saveTimer = null, retryTimer = null, syncing = false, again = false, repoChecked = false;
+  let saveTimer = null, retryTimer = null, syncing = false, again = false;
 
   function scheduleSave(delay = SAVE_DELAY) {
     if (!gh) return;
@@ -440,11 +379,6 @@
     clearTimeout(retryTimer);
     setSync("saving");
     try {
-      if (!repoChecked) {
-        const info = await ghRepoInfo();
-        if (info.private === false) { setSync("public", "Data by byla veřejně čitelná. Použij soukromý repozitář."); return; }
-        repoChecked = true;
-      }
       let settled = false;
       for (let i = 0; i < 4 && !settled; i++) {
         const remote = await ghGetFile();
@@ -479,10 +413,10 @@
       if (meta.dirty) scheduleSave(); else setSync("ok");
     } catch (err) {
       console.warn("[sync]", err);
-      if (err instanceof GhError && err.status === 401) setSync("auth", USER ? "Token přestal platit. Odhlas se a přihlas znovu, případně požádej správce o nový záznam." : "GitHub odmítl token. Je platný a má právo Contents: Read and write?");
-      else if (err instanceof GhError && err.status === 403 && /rate limit/i.test(err.message)) { setSync("error", "Překročen limit požadavků GitHubu."); retryTimer = setTimeout(sync, 120000); }
-      else if (err instanceof GhError && err.status === 403) setSync("auth", "Token nemá právo zapisovat do tohoto repozitáře.");
-      else if (err instanceof GhError && err.status === 404) setSync("error", "Repozitář nebo větev nenalezena (nebo k nim token nemá přístup).");
+      if (err instanceof CloudError && (err.status === 401 || err.status === 403)) {
+        setSync("auth", "Přihlášení vypršelo. Přihlas se znovu, nic se neztratí.");
+        showLogin("Přihlášení vypršelo. Přihlas se znovu, změny na tomto zařízení zůstaly uložené.");
+      }
       else { setSync(navigator.onLine ? "error" : "offline", err.message || ""); retryTimer = setTimeout(sync, 20000); }
     } finally {
       syncing = false;
@@ -498,45 +432,6 @@
     sync();
   }
 
-  /* ---------- Připojení / odpojení ---------- */
-  const isPristine = () => {
-    if (liveTasks().length) return false;
-    return liveCats().every((c) => DEFAULT_CATS.some(([n, col]) => n === c.name && col === c.color));
-  };
-
-  async function connect(cfg) {
-    const prev = gh;
-    gh = cfg;
-    try {
-      const info = await ghRepoInfo();
-      if (info.private === false) throw new Error("Tenhle repozitář je veřejný. Data by si mohl přečíst kdokoli. Vytvoř soukromý.");
-      const remote = await ghGetFile();
-      if (remote && isPristine()) {
-        // nové zařízení: neduplikovat výchozí kategorie, které už jinde existují
-        state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
-      }
-      store.set(K.gh, cfg);
-      store.set(K.seeded, true);
-      meta = { sha: null, dirty: true };
-      repoChecked = true;
-      persist();
-      render();
-      sync();
-    } catch (e) {
-      gh = prev;
-      throw e;
-    }
-  }
-
-  function disconnect() {
-    gh = null;
-    store.del(K.gh);
-    meta = { sha: null, dirty: false };
-    clearTimeout(saveTimer);
-    clearTimeout(retryTimer);
-    persist();
-    setSync("local");
-  }
 
   /* =====================================================================
      Toast
@@ -1992,71 +1887,28 @@
     const box = $("st-status");
     if (!box) return;
     const connected = Boolean(gh);
-    $("st-form-block").hidden = connected;
     $("st-connected-block").hidden = !connected;
-    $("st-disconnect").hidden = Boolean(USER);
     $("st-logout").hidden = !USER;
-    $("st-conn-note").textContent = USER
-      ? "Odhlášení smaže z tohoto zařízení token i místní kopii dat. Na GitHubu zůstávají."
-      : "Odpojení smaže z tohoto zařízení token. Data v repozitáři i lokální kopie zůstávají.";
+    $("st-conn-note").textContent = "Odhlášení smaže z tohoto zařízení místní kopii dat. V cloudu zůstávají.";
     const [txt, cls] = SYNC[syncKind];
     box.className = "st-status " + cls;
     box.replaceChildren(h("span", { class: "dot-s" }),
       h("div", null,
         h("strong", null, connected ? txt : "Data jsou jen v tomto zařízení"),
-        connected ? h("p", null, USER ? `Přihlášena jako ${USER} · ${gh.path}` : `${gh.repo} · ${gh.path}`)
-          : h("p", null, "Připoj soukromý repozitář na GitHubu a úkoly budou na všech zařízeních."),
+        connected ? h("p", null, `Přihlášena jako ${(gh && gh.label) || ""}`) : h("p", null, "Přihlas se a úkoly budou na všech zařízeních."),
         syncDetail ? h("p", { class: "st-detail" }, syncDetail) : null));
   }
 
   function openStore() {
     renderStoreStatus();
-    $("st-error").textContent = "";
-    $("st-token").value = "";
-    if (!gh && !$("st-repo").value) $("st-repo").value = store.get("stickies:v3:lastrepo", "");
     closeSide();
     $("store-dialog").showModal();
   }
   $("sync").addEventListener("click", openStore);
   $("sync-mini").addEventListener("click", openStore);
 
-  $("store-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (gh) return;
-    const err = $("st-error"), btn = $("st-connect");
-    err.textContent = "";
-    const repo = $("st-repo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
-    const token = $("st-token").value.trim();
-    const path = ($("st-path").value.trim() || "stickies-data.json").replace(/^\/+/, "");
-    const branch = $("st-branch").value.trim();
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { err.textContent = "Zadej repozitář ve tvaru vlastník/název, třeba magda/stickies-data."; $("st-repo").focus(); return; }
-    if (!token) { err.textContent = "Vlož přístupový token."; $("st-token").focus(); return; }
-    btn.disabled = true; btn.textContent = "Připojuji…";
-    try {
-      await connect({ repo, token, path, branch });
-      store.set("stickies:v3:lastrepo", repo);
-      $("st-token").value = "";
-      renderStoreStatus();
-      toast("Připojeno. Data se ukládají na GitHub.");
-    } catch (ex) {
-      err.textContent = ex instanceof GhError
-        ? ex.status === 401 ? "GitHub token odmítl. Zkontroluj, že je celý a nevypršel."
-        : ex.status === 404 ? "Repozitář jsem nenašel, nebo k němu token nemá přístup. Token musí mít vybraný právě tenhle repozitář."
-        : ex.status === 403 ? "Token nemá potřebná práva. Potřebuje Contents: Read and write."
-        : `GitHub odpověděl chybou ${ex.status}: ${ex.message}`
-        : (ex.message || "Připojení se nepovedlo.");
-      if (!navigator.onLine) err.textContent = "Jsi offline. Připoj se k internetu a zkus to znovu.";
-    } finally {
-      btn.disabled = false; btn.textContent = "Připojit";
-    }
-  });
-
-  $("st-sync").addEventListener("click", () => { repoChecked = false; sync(); });
-  $("st-disconnect").addEventListener("click", () => {
-    disconnect();
-    renderStoreStatus();
-    toast("Zařízení odpojeno. Úkoly tu zůstaly.");
-  });
+  $("store-form").addEventListener("submit", (e) => e.preventDefault());
+  $("st-sync").addEventListener("click", () => { sync(); });
 
   $("st-export").addEventListener("click", () => {
     const blob = new Blob([JSON.stringify({ app: "stickies", v: 3, exported_at: nowIso(), ...state }, null, 1)], { type: "application/json" });
@@ -2271,43 +2123,123 @@
   });
 
   /* =====================================================================
-     Přihlášení (jen jméno, token je v users.js)
+     Přihlášení (Supabase: e-mail + heslo)
      ===================================================================== */
-  const usersMap = () => window.STICKIES_USERS || {};
+  const Cloud = window.StickiesCloud;
+  let loginMode = "in";
+
+  const LOGIN_TXT = {
+    in:    { title: "Přihlášení", submit: "Přihlásit se", alt: "Vytvořit účet", pass: "current-password" },
+    up:    { title: "Nový účet", submit: "Vytvořit účet", alt: "Už mám účet", pass: "new-password" },
+    reset: { title: "Nové heslo", submit: "Poslat odkaz e-mailem", alt: "Zpět na přihlášení", pass: "current-password" },
+    newpw: { title: "Nastav nové heslo", submit: "Uložit heslo", alt: "", pass: "new-password" },
+  };
+
+  function setLoginMode(m) {
+    loginMode = m;
+    const t = LOGIN_TXT[m];
+    $("login-title").textContent = t.title;
+    $("login-submit").textContent = t.submit;
+    $("login-mode-up").textContent = t.alt;
+    $("login-mode-up").hidden = !t.alt;
+    $("login-forgot").hidden = m !== "in";
+    $("login-pass-wrap").hidden = m === "reset";
+    $("login-email-wrap").hidden = m === "newpw";
+    $("login-pass").autocomplete = t.pass;
+    $("login-error").textContent = "";
+    $("login-info").textContent = "";
+  }
 
   function showLogin(msg) {
     $("app").hidden = true;
     $("login").hidden = false;
+    if (loginMode === "newpw") setLoginMode("in");
     $("login-error").textContent = msg || "";
-    $("login-user").focus();
+    $("login-info").textContent = "";
+    (($("login-email").value ? $("login-pass") : $("login-email"))).focus();
   }
+
+  function loginMsg(e) {
+    const m = String((e && e.message) || "");
+    if (/invalid login/i.test(m)) return "Špatný e-mail nebo heslo.";
+    if (/not confirmed/i.test(m)) return "E-mail ještě není potvrzený. Otevři odkaz v potvrzovacím e-mailu.";
+    if (/already registered|already been registered/i.test(m)) return "Na tenhle e-mail už účet existuje. Přihlas se.";
+    if (/Database error|pozvání/i.test(m)) return "Pro tenhle e-mail není pozvánka. Napiš správci, ať ho přidá.";
+    if (/rate limit|too many|security purposes/i.test(m)) return "Moc pokusů za sebou. Zkus to za chvíli.";
+    if (/at least|weak|short/i.test(m)) return "Heslo musí mít aspoň 8 znaků.";
+    if (e && e.status === 0) return "Server není dostupný. Zkontroluj připojení.";
+    return m || "Přihlášení se nepovedlo. Zkus to prosím znovu.";
+  }
+
+  /** Starší verze (GitHub) držela místní kopii dat pod jménem. Převezmeme ji, ať se neztratí změny z offline zařízení. */
+  function adoptLegacy(uid) {
+    const old = store.get(K.session, null);
+    const name = old && old.user;
+    const target = `stickies:v3:u:${uid}:`;
+    if (name && store.get(target + "data", null) == null) {
+      const src = `stickies:v3:u:${name}:`;
+      const d = store.get(src + "data", null);
+      if (d) {
+        store.set(target + "data", d);
+        store.set(target + "seeded", true);
+        const lc = store.get(src + "lastcat", null);
+        if (lc != null) store.set(target + "lastcat", lc);
+        store.set(target + "meta", { sha: null, dirty: true });
+      }
+    }
+    if (old) store.del(K.session);   // starý GitHub token na tomhle zařízení už není potřeba
+  }
+
+  function enter() {
+    const s = Cloud.session();
+    adoptLegacy(s.user.id);
+    start(s.user.id, s.user.email);
+  }
+
+  $("login-mode-up").addEventListener("click", () => setLoginMode(loginMode === "in" ? "up" : "in"));
+  $("login-forgot").addEventListener("click", () => setLoginMode("reset"));
 
   $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const err = $("login-error"), btn = $("login-submit");
-    err.textContent = "";
-    const name = $("login-user").value.trim().toLowerCase();
-    if (!name) { err.textContent = "Napiš své jméno."; return; }
-    btn.disabled = true; btn.textContent = "Otevírám…";
+    const err = $("login-error"), info = $("login-info"), btn = $("login-submit");
+    err.textContent = ""; info.textContent = "";
+    const email = $("login-email").value.trim().toLowerCase();
+    const pass = $("login-pass").value;
+    if (loginMode !== "newpw" && !/^\S+@\S+\.\S+$/.test(email)) { err.textContent = "Napiš svůj e-mail."; $("login-email").focus(); return; }
+    if (loginMode !== "reset" && !pass) { err.textContent = "Napiš heslo."; $("login-pass").focus(); return; }
+    if ((loginMode === "up" || loginMode === "newpw") && pass.length < 8) { err.textContent = "Heslo musí mít aspoň 8 znaků."; $("login-pass").focus(); return; }
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = "Chvilku…";
     try {
-      const entry = usersMap()[name];
-      const tok = entry ? (Array.isArray(entry.token) ? entry.token.join("") : entry.token) : "";
-      const cfg = tok ? { repo: entry.repo || window.STICKIES_REPO, token: String(tok).trim(), path: entry.path } : null;
-      if (!cfg || !cfg.repo) { err.textContent = "Takové jméno neznám. Zkontroluj, jak ho píšeš, nebo se zeptej správce."; return; }
-      store.set(K.session, { user: name, cfg });
-      start(name, cfg);
-    } catch {
-      err.textContent = "Přihlášení se nepovedlo. Zkus to prosím znovu.";
+      if (loginMode === "in") { await Cloud.signIn(email, pass); $("login-pass").value = ""; enter(); }
+      else if (loginMode === "up") {
+        const r = await Cloud.signUp(email, pass);
+        $("login-pass").value = "";
+        if (r.session) enter();
+        else { setLoginMode("in"); info.textContent = "Poslali jsme ti potvrzovací e-mail. Otevři odkaz v něm a potom se přihlas."; }
+      } else if (loginMode === "reset") {
+        await Cloud.resetPassword(email);
+        setLoginMode("in");
+        info.textContent = "Pokud k tomu e-mailu existuje účet, přišel na něj odkaz pro nastavení hesla.";
+      } else if (loginMode === "newpw") {
+        await Cloud.setPassword(pass);
+        $("login-pass").value = "";
+        setLoginMode("in");
+        enter();
+      }
+    } catch (ex) {
+      err.textContent = loginMsg(ex);
     } finally {
-      btn.disabled = false; btn.textContent = "Otevřít moje úkoly";
+      btn.disabled = false; btn.textContent = LOGIN_TXT[loginMode].submit;
     }
   });
 
   async function logout() {
     if (gh && meta.dirty) await sync();
-    if (meta.dirty && !confirm("Některé změny se ještě neuložily na GitHub a po odhlášení se ztratí. Odhlásit se přesto?")) return;
-    ["data", "meta", "seeded", "lastcat", "gh"].forEach((k) => store.del(`stickies:v3:u:${USER}:${k}`));
+    if (meta.dirty && !confirm("Některé změny se ještě neuložily do cloudu a po odhlášení se ztratí. Odhlásit se přesto?")) return;
+    ["data", "meta", "seeded", "lastcat"].forEach((k) => store.del(`stickies:v3:u:${USER}:${k}`));
     store.del(K.session);
+    await Cloud.signOut();
     location.reload();
   }
   $("side-logout").addEventListener("click", logout);
@@ -2318,14 +2250,14 @@
      ===================================================================== */
   let bound = false;
 
-  function start(user, cfg) {
+  function start(user, label) {
     setNamespace(user);
     loadLocal();
-    if (user) gh = { repo: cfg.repo, token: cfg.token, path: cfg.path || `data/${user}.json`, branch: cfg.branch || "" };
+    if (user) gh = { label };
     $("login").hidden = true;
     $("app").hidden = false;
     $("side-logout").hidden = !user;
-    $("side-logout-t").textContent = user ? `Odhlásit se (${user})` : "Odhlásit se";
+    $("side-logout-t").textContent = user ? `Odhlásit se (${label})` : "Odhlásit se";
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
@@ -2366,14 +2298,13 @@
   function boot() {
     applyPrefs();
     buildPrefs();
-    const users = usersMap();
-    if (Object.keys(users).length) {
-      const s = store.get(K.session, null);
-      if (s && users[s.user] && s.cfg && s.cfg.repo && s.cfg.token) start(s.user, s.cfg);
-      else showLogin();
-    } else {
-      start(null, null);
-    }
+    if (!Cloud) { start(null, null); return; }
+    const link = Cloud.consumeHash();
+    if (link && link.type === "recovery") { showLogin(); setLoginMode("newpw"); return; }
+    if (link && link.error) { showLogin(link.error); return; }
+    const sess = Cloud.session();
+    if (sess && sess.user) { adoptLegacy(sess.user.id); start(sess.user.id, sess.user.email); }
+    else showLogin();
   }
 
   boot();
