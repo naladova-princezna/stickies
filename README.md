@@ -85,6 +85,7 @@ Stránka **Studium** je studijní pomocník navržený tak, aby ses neztratila v
 
 #### Práce: týdenní sprint na psaní
 Sekce **Práce** (diplomová, bakalářská, disertační) je nástroj na to, aby se práce dala napsat v řádu dnů. Logika je v `diplomka.js` (bez DOM, jde spustit v Node), vykreslení v `studium.js`.
+- **Harmonogram**: práce rozdělená do fází s daty a úkoly (tvorba, schůzka, testování, psaní, odeslání). Tlačítko **Nastavit plán na 4 týdny** spočítá fáze od dneška (zbytek týdne, pak tři týdny po sobě), nastaví sprint na fázi Psaní a ukazuje, která fáze právě běží a za kolik dní se odesílá vedoucí. U kapitol jde zapnout **Lze psát dřív** (nezávisí na modelech ani testování) a aplikace spočítá, kolik stran denně ušetříš ve fázi Psaní.
 - **Sprint**: zadáš první a poslední den. Poslední den (od 4 dnů délky) je rezerva na revizi a odevzdání. Plán se pokaždé spočítá znovu z toho, co zbývá napsat, a rozloží se do zbývajících psacích dnů. Zameškaný den se nehromadí jako dluh, jen se mírně zvedne denní dávka. Dny jde označit jako **Volno**.
 - **Dnes napsat**: jedna dávka stran a v které kapitole. Dávka v plánu se po zápisu stran snižuje, po překročení je dnešek hotový a zbytek se přerozdělí. Tempo nad 8 stran denně je označené jako náročné, nad 12 jako příliš vysoké (obě hranice jsou odhad, ne měření, konstanty `HARD` a `OVER` v `diplomka.js`). Žádné červené hlášky.
 - **Zapsat stránky** přičte strany ke kapitole i do deníku psaní a jde vrátit tlačítkem Zpět.

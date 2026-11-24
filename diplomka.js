@@ -48,7 +48,7 @@ function mkSection(t, id) { return { id: id || uid(), title: String(t).trim(), d
 function mkChapter(o) {
   return {
     id: o.id || uid(), title: String(o.title || '').trim() || 'Kapitola', status: o.status || 'todo',
-    pages: num(o.pages), target: num(o.target), note: o.note || '',
+    pages: num(o.pages), target: num(o.target), note: o.note || '', early: !!o.early,
     sections: (o.sections || []).filter(function (s) { return String(s).trim(); }).map(function (s) { return typeof s === 'string' ? mkSection(s) : s; })
   };
 }
@@ -92,6 +92,7 @@ function setSections(ch, text) {
 function fixChapter(c) {
   c.pages = num(c.pages); c.target = num(c.target);
   if (c.note == null) c.note = '';
+  c.early = !!c.early;
   if (!Array.isArray(c.sections)) c.sections = [];
   if (!c.status) c.status = 'todo';
   return c;
@@ -265,12 +266,73 @@ function brief(th, o) {
   return L.join('\n') + '\n';
 }
 
+/* ---------- fáze (harmonogram na více týdnů) ---------- */
+var PHASE_KINDS = { build: 'Tvorba', meet: 'Schůzka', test: 'Testování', write: 'Psaní', send: 'Odeslání', other: 'Jiné' };
+function daysBetween(a, b) { return Math.round((parse(b) - parse(a)) / 864e5); }
+function mkPhase(o) {
+  return { id: o.id || uid(), title: String(o.title || '').trim() || 'Fáze', kind: PHASE_KINDS[o.kind] ? o.kind : 'other',
+    start: o.start, end: o.end < o.start ? o.start : o.end,
+    items: (o.items || []).filter(function (t) { return String(t.title || t).trim(); }).map(function (t) { return typeof t === 'string' ? { id: uid(), title: t.trim(), done: false } : t; }) };
+}
+function setPhaseItems(p, text) {
+  var old = {}; (p.items || []).forEach(function (i) { old[i.title] = i; });
+  p.items = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).map(function (t) { return old[t] || { id: uid(), title: t, done: false }; });
+}
+function phaseItemsText(p) { return (p.items || []).map(function (i) { return i.title; }).join('\n'); }
+function fixPhase(p) {
+  if (!Array.isArray(p.items)) p.items = [];
+  if (!PHASE_KINDS[p.kind]) p.kind = 'other';
+  return p;
+}
+/* Čtyři týdny: zbytek tohoto týdne na tvorbu, pak schůzka a testování, psaní a odeslání vedoucí.
+   O víkendu začíná první fáze až příští pondělí. */
+function presetPhases(today) {
+  var dow = parse(today).getDay(), toSun = (7 - dow) % 7;
+  var e0 = addDays(today, toSun < 2 ? toSun + 7 : toSun), s0 = toSun < 2 ? addDays(today, toSun + 1) : today;
+  return [
+    mkPhase({ title: 'Modely', kind: 'build', start: s0, end: e0, items: ['Dokončit 3D modely', 'Vytisknout a zkontrolovat modely', 'Rozepsat metodické listy k modelům'] }),
+    mkPhase({ title: 'Schůzka s učitelkou a testování', kind: 'test', start: addDays(e0, 1), end: addDays(e0, 7),
+      items: ['Domluvit termín schůzky s učitelkou na SŠ', 'Schůzka s učitelkou', 'Domluvit termíny testování', 'Provést testování', 'Zapsat a zpracovat výsledky'] }),
+    mkPhase({ title: 'Psaní práce', kind: 'write', start: addDays(e0, 8), end: addDays(e0, 14),
+      items: ['Všechny kapitoly napsané', 'Parkoviště vyřešené (zdroje, obrázky)', 'Abstrakt a závěr'] }),
+    mkPhase({ title: 'Odeslání vedoucí', kind: 'send', start: addDays(e0, 15), end: addDays(e0, 21),
+      items: ['Formální kontrola podle šablony', 'Sestavit PDF', 'Odeslat vedoucí ke kontrole'] })
+  ];
+}
+function phaseStatus(th, today) {
+  var ps = (th.phases || []).slice().sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
+  var list = ps.map(function (p) {
+    var st = today < p.start ? 'future' : today > p.end ? 'past' : 'now', it = p.items || [], nd = it.filter(function (i) { return i.done; }).length;
+    return { id: p.id, title: p.title, kind: p.kind, start: p.start, end: p.end, items: it, state: st, done: nd, total: it.length,
+      pct: it.length ? Math.round(100 * nd / it.length) : 0, dayCount: daysBetween(p.start, p.end) + 1,
+      dayNo: st === 'now' ? daysBetween(p.start, today) + 1 : 0, daysLeft: st === 'now' ? daysBetween(today, p.end) : 0,
+      daysTo: st === 'future' ? daysBetween(today, p.start) : 0, open: st === 'past' ? it.length - nd : 0 };
+  });
+  var send = list.filter(function (p) { return p.kind === 'send'; }).slice(-1)[0] || null;
+  return { list: list, current: list.filter(function (p) { return p.state === 'now'; })[0] || null,
+    next: list.filter(function (p) { return p.state === 'future'; })[0] || null, send: send, daysToSend: send ? daysBetween(today, send.end) : null };
+}
+/* Kolik stran denně ve fázi psaní zbyde, když kapitoly označené jako nezávislé na testování napíšeš dřív. */
+function earlyEffect(th) {
+  var wp = (th.phases || []).filter(function (p) { return p.kind === 'write'; })[0];
+  if (!wp) return null;
+  var rest = {}; ((th.sprint && th.sprint.rest) || []).forEach(function (d) { rest[d] = 1; });
+  var days = listDays(wp.start, wp.end), fin = days.length >= 4 ? wp.end : '';
+  var W = days.filter(function (d) { return !rest[d] && d !== fin; }).length;
+  var R = 0, E = 0;
+  th.chapters.forEach(function (c) { var r = chapterRemaining(c); R += r; if (c.early) E += r; });
+  if (!W || !E || R <= 0) return null;
+  return { writingDays: W, early: r1(E), withAll: r1(R / W), withoutEarly: r1((R - E) / W) };
+}
+
 var api = {
   TEMPLATES: TEMPLATES, PARK_KINDS: PARK_KINDS, HARD: HARD, OVER: OVER,
   fromTemplate: fromTemplate, parseOutline: parseOutline, mkChapter: mkChapter, fixChapter: fixChapter,
   sectionsText: sectionsText, setSections: setSections, pagesTotal: pagesTotal, targetTotal: targetTotal,
   chapterRemaining: chapterRemaining, chapterPct: chapterPct, loggedOn: loggedOn, addLog: addLog, removeLog: removeLog,
   plan: plan, nextStep: nextStep, defaultChecklist: defaultChecklist, latex: latex, brief: brief,
+  PHASE_KINDS: PHASE_KINDS, mkPhase: mkPhase, fixPhase: fixPhase, setPhaseItems: setPhaseItems, phaseItemsText: phaseItemsText,
+  presetPhases: presetPhases, phaseStatus: phaseStatus, earlyEffect: earlyEffect, daysBetween: daysBetween,
   slug: slug, texEsc: texEsc, addDays: addDays, listDays: listDays, uid: uid
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Diplomka = api;

@@ -77,7 +77,7 @@ function cur(){var f=S.studies.filter(function(x){return x.id===S.active;})[0];r
 function chPages(){return D.thesis.chapters.reduce(function(a,c){return a+(Number(c.pages)||0);},0);}
 
 /* ---------- data ---------- */
-function emptyThesis(){return {title:'',supervisor:'',department:'',targetPages:60,dates:{assign:'',submit:'',exam:'',defense:''},tasks:[],chapters:[],consultations:[],notes:'',sprint:{start:'',end:'',rest:[]},log:[],parking:[],checklist:[]};}
+function emptyThesis(){return {title:'',supervisor:'',department:'',targetPages:60,dates:{assign:'',submit:'',exam:'',defense:''},tasks:[],chapters:[],consultations:[],notes:'',sprint:{start:'',end:'',rest:[]},log:[],parking:[],checklist:[],phases:[]};}
 var LEVELS={bc:'Bakalářské studium',nmgr:'Navazující magisterské studium',mgr:'Magisterské studium',phd:'Doktorské studium',other:'Jiné studium'};
 var LEVEL_SHORT={bc:'Bc.',nmgr:'NMgr.',mgr:'Mgr.',phd:'Ph.D.'};
 function emptyStudy(id,level){
@@ -106,9 +106,9 @@ function normStudy(st){
   var th=st.thesis||{},tb=emptyThesis();
   Object.keys(tb).forEach(function(k){if(th[k]==null)th[k]=tb[k];});
   th.dates=Object.assign({assign:'',submit:'',exam:'',defense:''},th.dates||{});
-  ['tasks','chapters','consultations','log','parking','checklist'].forEach(function(k){th[k]=Array.isArray(th[k])?th[k]:[];});
+  ['tasks','chapters','consultations','log','parking','checklist','phases'].forEach(function(k){th[k]=Array.isArray(th[k])?th[k]:[];});
   th.sprint=Object.assign({start:'',end:'',rest:[]},th.sprint||{});if(!Array.isArray(th.sprint.rest))th.sprint.rest=[];
-  th.chapters.forEach(Diplomka.fixChapter);
+  th.chapters.forEach(Diplomka.fixChapter);th.phases.forEach(Diplomka.fixPhase);
   th.tasks.forEach(function(r){if(r.note==null)r.note='';});
   st.thesis=th;
   st.subjects.forEach(fixSubject);
@@ -333,12 +333,13 @@ function chapterForm(id){
     {name:'status',label:'Stav',type:'select',options:[['todo','Nezačato'],['wip','Rozpracováno'],['done','Hotovo']]},
     {name:'target',label:'Plánovaný rozsah (stran)',type:'number',min:0,step:0.5},
     {name:'pages',label:'Napsáno (stran)',type:'number',min:0,step:0.5},
+    {name:'early',label:'Lze psát dřív (nezávisí na modelech a testování)',type:'select',options:[['','Ne'],['1','Ano']]},
     {name:'sections',label:'Oddíly (jeden na řádek)',type:'textarea'},
     {name:'note',label:'Poznámka ke kapitole',type:'textarea'}],
-    values:c?{title:c.title,status:c.status,target:c.target,pages:c.pages,sections:Diplomka.sectionsText(c),note:c.note}:{title:'',status:'todo',target:0,pages:0,sections:'',note:''},
+    values:c?{title:c.title,status:c.status,target:c.target,pages:c.pages,sections:Diplomka.sectionsText(c),note:c.note,early:c.early?'1':''}:{title:'',status:'todo',target:0,pages:0,sections:'',note:'',early:''},
     onSave:function(v){
       var o=c||Diplomka.mkChapter({title:v.title});
-      o.title=v.title.trim();o.status=v.status;o.target=Math.max(0,Number(v.target)||0);o.pages=Math.max(0,Number(v.pages)||0);o.note=v.note||'';
+      o.title=v.title.trim();o.status=v.status;o.target=Math.max(0,Number(v.target)||0);o.pages=Math.max(0,Number(v.pages)||0);o.note=v.note||'';o.early=v.early==='1';
       Diplomka.setSections(o,v.sections);
       if(!c)D.thesis.chapters.push(o);
       changed();}});
@@ -353,12 +354,12 @@ function consForm(id){
 
 /* ---------- Diplomka: sprint, osnova, zápis stran, parkoviště, exporty ---------- */
 function pg(x){return String(Math.round((Number(x)||0)*10)/10).replace('.',',');}
-function sprintForm(){
-  var t=D.thesis,sp=t.sprint;
+function sprintForm(phId){
+  var t=D.thesis,sp=t.sprint,wph=t.phases.filter(function(x){return x.id===phId;})[0]||t.phases.filter(function(x){return x.kind==='write';})[0];
   openForm({title:'Týdenní sprint',intro:'Plán se každý den přepočítá z toho, co zbývá napsat. Poslední den sprintu je rezerva na revizi a odevzdání.',
     fields:[{name:'start',label:'První psací den',type:'date',required:true},{name:'end',label:'Poslední den sprintu',type:'date',required:true},
       {name:'targetPages',label:'Cílový rozsah práce (stran)',type:'number',min:0,step:1}],
-    values:{start:sp.start||today(),end:sp.end||addDays(7),targetPages:t.targetPages},
+    values:{start:phId&&wph?wph.start:(sp.start||(wph?wph.start:today())),end:phId&&wph?wph.end:(sp.end||(wph?wph.end:addDays(7))),targetPages:t.targetPages},
     onSave:function(v){
       var a=v.start,b=v.end;if(b<a){var x=a;a=b;b=x;}
       t.sprint={start:a,end:b,rest:(sp.rest||[]).filter(function(d){return d>=a&&d<=b;})};
@@ -401,6 +402,65 @@ function parkAdd(){
   D.thesis.parking.push({id:uid(),kind:ui.park.kind,text:txt,chId:ui.park.ch,done:false});
   ui.park.text='';changed();return true;
 }
+/* ---------- Diplomka: fáze (harmonogram) ---------- */
+function phaseForm(id){
+  var t=D.thesis,ph=id?t.phases.filter(function(x){return x.id===id;})[0]:null;
+  var K=Diplomka.PHASE_KINDS;
+  openForm({title:ph?'Upravit fázi':'Nová fáze',intro:'Druh fáze určuje jen popisek. Psací fáze se nabízí jako termín sprintu.',
+    fields:[{name:'title',label:'Název fáze',required:true},{name:'kind',label:'Druh',type:'select',options:Object.keys(K).map(function(k){return [k,K[k]];})},
+      {name:'start',label:'Od',type:'date',required:true},{name:'end',label:'Do',type:'date',required:true},{name:'items',label:'Co v ní udělat (jedna věc na řádek)',type:'textarea'}],
+    values:ph?{title:ph.title,kind:ph.kind,start:ph.start,end:ph.end,items:Diplomka.phaseItemsText(ph)}:{title:'',kind:'other',start:today(),end:addDays(6),items:''},
+    onSave:function(v){
+      var a=v.start,b=v.end;if(b<a){var x=a;a=b;b=x;}
+      var o=ph||Diplomka.mkPhase({title:v.title,start:a,end:b});
+      o.title=v.title.trim();o.kind=v.kind;o.start=a;o.end=b;Diplomka.setPhaseItems(o,v.items);
+      if(!ph)t.phases.push(o);changed();}});
+}
+function presetPlan(){
+  var t=D.thesis;
+  function go(){
+    t.phases=Diplomka.presetPhases(today());
+    var w=t.phases.filter(function(x){return x.kind==='write';})[0];
+    if(w&&!t.sprint.start)t.sprint={start:w.start,end:w.end,rest:[]};
+    changed();toast('Plán na 4 týdny je nastavený. Sprint psaní: '+fmtShort(w.start).replace(/ \d{4}$/,'')+' až '+fmtShort(w.end).replace(/ \d{4}$/,'')+'.');
+    if(!t.chapters.length)outlineForm();
+  }
+  if(t.phases.length)confirmBox('Stávající fáze se nahradí novými.','Nahradit fáze',go);else go();
+}
+function phasesStartCard(){
+  return '<section class="card now"><p class="eyebrow">Harmonogram</p><h3>Rozplánuj práci na týdny</h3>'+
+   '<p class="muted" style="margin:6px 0 14px;max-width:620px">Hotový plán: zbytek tohoto týdne modely, příští týden schůzka s učitelkou a testování, pak psaní a nakonec odeslání vedoucí ke kontrole. Datumy se spočítají od dneška a jde je upravit.</p>'+
+   '<div class="btns" style="justify-content:flex-start"><button class="btn primary big" data-act="phase-preset" type="button">Nastavit plán na 4 týdny</button><button class="btn big" data-act="add-phase" type="button">Vytvořit fáze ručně</button></div></section>';
+}
+function rng(a,b){return fmtShort(a).replace(/ \d{4}$/,'')+' až '+fmtShort(b).replace(/ \d{4}$/,'');}
+function phasesCard(){
+  var t=D.thesis,st=Diplomka.phaseStatus(t,today()),ef=Diplomka.earlyEffect(t);
+  var h='<section class="card"><div class="head-row"><h3>Harmonogram</h3><div style="display:flex;gap:12px"><button class="link" data-act="phase-preset" type="button">Nastavit znovu</button><button class="link" data-act="add-phase" type="button">Přidat fázi</button></div></div>';
+  var sum;
+  if(st.current)sum='Teď: <b>'+esc(st.current.title)+'</b>, den '+st.current.dayNo+' z '+st.current.dayCount+(st.current.daysLeft?', do konce '+st.current.daysLeft+' '+plural(st.current.daysLeft,'den','dny','dní'):', dnes poslední den');
+  else if(st.next)sum='Další fáze <b>'+esc(st.next.title)+'</b> začíná '+esc(fmt(st.next.start))+'.';
+  else sum='Všechny fáze jsou za tebou.';
+  if(st.send)sum+=st.daysToSend>=0?' · Odeslání vedoucí do '+esc(fmt(st.send.end))+' ('+(st.daysToSend===0?'dnes':'za '+st.daysToSend+' '+plural(st.daysToSend,'den','dny','dní'))+')':'';
+  h+='<p style="margin:6px 0 12px">'+sum+'</p><div>';
+  st.list.forEach(function(p){
+    var open=('ph:'+p.id) in ui.fold?!!ui.fold['ph:'+p.id]:p.state==='now';
+    var chip=p.state==='now'?'<span class="chip good">teď</span>':p.state==='past'?(p.open?'<span class="chip">nedokončeno '+p.open+'</span>':'<span class="chip">za tebou</span>'):'<span class="chip">'+(p.daysTo===1?'zítra':'za '+p.daysTo+' '+plural(p.daysTo,'den','dny','dní'))+'</span>';
+    h+='<div class="chx"><div class="chrow"><div class="t">'+esc(p.title)+'<div class="muted" style="font-size:13px;font-weight:400">'+esc(rng(p.start,p.end))+' · '+esc(Diplomka.PHASE_KINDS[p.kind]||'')+'</div></div>'+chip+
+     (p.total?'<span class="muted" style="font-size:13px">'+p.done+' z '+p.total+'</span>':'')+
+     '<div class="tools"><button class="link" data-act="phfold" data-id="'+p.id+'" aria-expanded="'+open+'" type="button">'+(open?'Skrýt':'Detail')+'</button></div></div>'+
+     '<div class="bar slim" role="img" aria-label="'+p.pct+' %"><i style="width:'+p.pct+'%"></i></div>';
+    if(open)h+='<div class="chdet">'+(p.items.length?p.items.map(function(i){return '<label class="chk"><input type="checkbox" data-change="phitem" data-id="'+p.id+'" data-iid="'+i.id+'"'+(i.done?' checked':'')+'> <span'+(i.done?' class="sdone"':'')+'>'+esc(i.title)+'</span></label>';}).join(''):'<p class="muted" style="margin:0;font-size:13px">Bez úkolů. Přidej je v Upravit.</p>')+
+      '<div class="tools" style="margin-top:8px">'+(p.kind==='write'?'<button class="link" data-act="sprint-set" data-id="'+p.id+'" type="button">Nastavit sprint na tuto fázi</button>':'')+'<button class="link" data-act="edit-phase" data-id="'+p.id+'" type="button">Upravit</button><button class="link bad" data-act="del-phase" data-id="'+p.id+'" type="button">Smazat</button></div></div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  var wp=t.phases.filter(function(x){return x.kind==='write';})[0];
+  if(wp&&(!t.sprint.start||t.sprint.start!==wp.start||t.sprint.end!==wp.end))h+='<p class="soft" style="margin-top:10px">Sprint psaní zatím neodpovídá fázi Psaní ('+esc(rng(wp.start,wp.end))+'). <button class="link" data-act="sprint-set" data-id="'+wp.id+'" type="button">Nastavit podle fáze</button></p>';
+  if(ef)h+='<p class="soft" style="margin-top:10px">Kapitoly označené jako nezávislé na testování (napsat jde už teď, zbývá '+pg(ef.early)+' s.): když je napíšeš před fází Psaní, zbude v ní asi '+pg(ef.withoutEarly)+' stran denně místo '+pg(ef.withAll)+'.</p>';
+  else if(wp&&t.chapters.length)h+='<p class="soft" style="margin-top:10px">Tip: u kapitol, které nezávisí na modelech ani testování (třeba Úvod nebo teoretická část), zapni v Upravit „Lze psát dřív“. Ukážu ti, kolik stran denně tím ve fázi Psaní ušetříš.</p>';
+  return h+'</section>';
+}
+
 function exportModal(title,text,fname,mime,note){
   $('#modal-root').innerHTML='<div class="scrim" data-scrim="1"><div class="modal wide" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><h3>'+esc(title)+'</h3>'+(note?'<p class="muted">'+esc(note)+'</p>':'')+
     '<textarea id="ex-text" class="note" style="min-height:260px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace" readonly></textarea><p id="ex-msg" class="muted" role="status"></p>'+
@@ -539,13 +599,15 @@ function onboardingCard(){
    '<ol class="onb-list">'+steps.map(function(x){var cur=!x[1]&&next;if(!x[1])next=false;return '<li class="'+(x[1]?'ok':(cur?'cur':''))+'"><span class="mk" aria-hidden="true">'+(x[1]?'✓':'')+'</span><div><div>'+x[0]+'</div>'+(x[1]||!cur?'':'<div class="act">'+x[2]+'</div>')+'</div></li>';}).join('')+'</ol></section>';
 }
 function thesisSum(){
-  var pl=Diplomka.plan(D.thesis,today());
-  return pl.active&&pl.todayIsWriting&&pl.level!=='done'&&pl.level!=='notargets'&&pl.level!=='nodays'?'dnes asi '+pg(Math.ceil(pl.todayQuota*2)/2)+' s.':'';
+  var pl=Diplomka.plan(D.thesis,today()),ps=Diplomka.phaseStatus(D.thesis,today());
+  if(pl.active&&pl.todayIsWriting&&pl.level!=='done'&&pl.level!=='notargets'&&pl.level!=='nodays')return 'dnes asi '+pg(Math.ceil(pl.todayQuota*2)/2)+' s.';
+  return ps.current?ps.current.title.toLowerCase():'';
 }
 function thesisCard(){
   var t=D.thesis,p=prog(thesisSubj()),pw=chPages(),tp=Number(t.targetPages)||0,pl=Diplomka.plan(t,today());
-  var line='';
-  if(pl.active&&pl.todayIsWriting&&pl.level!=='done'&&pl.level!=='notargets'&&pl.level!=='nodays')line='<p style="margin:10px 0 0"><b>Dnes asi '+pg(Math.ceil(pl.todayQuota*2)/2)+' s.</b> <span class="muted">· zbývá '+pg(pl.remaining)+' stran, '+pl.writingDays+' '+plural(pl.writingDays,'psací den','psací dny','psacích dnů')+'</span></p>';
+  var line='',ps=Diplomka.phaseStatus(t,today());
+  if(ps.current)line+='<p style="margin:10px 0 0"><b>Teď: '+esc(ps.current.title)+'</b> <span class="muted">· den '+ps.current.dayNo+' z '+ps.current.dayCount+(ps.send&&ps.daysToSend>=0?' · odeslání vedoucí za '+ps.daysToSend+' '+plural(ps.daysToSend,'den','dny','dní'):'')+'</span></p>';
+  if(pl.active&&pl.todayIsWriting&&pl.level!=='done'&&pl.level!=='notargets'&&pl.level!=='nodays')line+='<p style="margin:10px 0 0"><b>Dnes asi '+pg(Math.ceil(pl.todayQuota*2)/2)+' s.</b> <span class="muted">· zbývá '+pg(pl.remaining)+' stran, '+pl.writingDays+' '+plural(pl.writingDays,'psací den','psací dny','psacích dnů')+'</span></p>';
   return '<section class="card"><div class="head-row"><h3>'+thesisLabel()+'</h3><a class="link" href="#prace" data-act="go" data-id="prace">Otevřít stránku práce</a></div>'+
    (t.title?'<p style="margin:6px 0 12px">'+esc(t.title)+'</p>':'<p class="muted" style="margin:6px 0 12px">Zatím bez názvu.</p>')+
    meter('Etapy práce',p+' %',p)+
@@ -855,7 +917,8 @@ function viewThesis(){
   var pgp=tp?Math.min(100,Math.round(100*pg0/tp)):0,chp=chn?Math.round(100*chd/chn):0;
   var h='<div class="head-row"><h2>'+L+'</h2><button class="btn" data-act="edit-thesis" type="button">Upravit údaje</button></div>';
   var pl=Diplomka.plan(t,today());
-  h+=pl.active?todayCard(pl)+planCard(pl):sprintStartCard();
+  h+=t.phases.length?phasesCard():phasesStartCard();
+  h+=pl.active?todayCard(pl)+planCard(pl):(t.phases.length?'':sprintStartCard());
   h+=chaptersCard()+parkCard()+exportCard()+checklistCard();
   h+='<section class="card"><h3>'+(t.title?esc(t.title):'<span class="muted">Zatím bez názvu</span>')+'</h3>'+
    '<dl class="dl"><div><dt>Vedoucí</dt><dd>'+(t.supervisor?esc(t.supervisor):'<span class="muted">nezadáno</span>')+'</dd></div>'+
@@ -977,7 +1040,12 @@ document.addEventListener('click',function(e){
     case 'edit-ch':chapterForm(id);break;
     case 'cyc-ch':var ch=D.thesis.chapters.filter(function(q){return q.id===id;})[0];ch.status=CH_NEXT[ch.status];changed();break;
     case 'del-ch':confirmBox('Kapitola se smaže.','Smazat kapitolu',function(){D.thesis.chapters=D.thesis.chapters.filter(function(q){return q.id!==id;});changed();});break;
-    case 'sprint-set':sprintForm();break;
+    case 'sprint-set':sprintForm(id);break;
+    case 'phase-preset':presetPlan();break;
+    case 'add-phase':phaseForm();break;
+    case 'edit-phase':phaseForm(id);break;
+    case 'del-phase':confirmBox('Fáze se smaže i s odškrtnutými úkoly.','Smazat fázi',function(){D.thesis.phases=D.thesis.phases.filter(function(q){return q.id!==id;});changed();});break;
+    case 'phfold':ui.fold['ph:'+id]=b.getAttribute('aria-expanded')!=='true';render();break;
     case 'sprint-end':confirmBox('Sprint se ukončí. Kapitoly, zapsané strany i parkoviště zůstanou.','Ukončit sprint',function(){D.thesis.sprint={start:'',end:'',rest:[]};ui.hint=null;changed();});break;
     case 'outline':outlineForm();break;
     case 'log':logForm(id);break;
@@ -1013,6 +1081,7 @@ document.addEventListener('change',function(e){
   else if(k==='tnotes'){D.thesis.notes=t.value;save();}
   else if(k==='secdone'){var sc=D.thesis.chapters.filter(function(q){return q.id===t.getAttribute('data-id');})[0],sx=sc&&sc.sections.filter(function(q){return q.id===t.getAttribute('data-sid');})[0];if(sx){sx.done=t.checked;changed();}}
   else if(k==='parkdone'){var px=D.thesis.parking.filter(function(q){return q.id===t.getAttribute('data-id');})[0];if(px){px.done=t.checked;changed();}}
+  else if(k==='phitem'){var pp=D.thesis.phases.filter(function(q){return q.id===t.getAttribute('data-id');})[0],pi2=pp&&pp.items.filter(function(q){return q.id===t.getAttribute('data-iid');})[0];if(pi2){pi2.done=t.checked;changed();}}
   else if(k==='parkkind'){ui.park.kind=t.value;}
   else if(k==='parkch'){ui.park.ch=t.value;}
   else if(k==='chk'){var cx=D.thesis.checklist.filter(function(q){return q.id===t.getAttribute('data-id');})[0];if(cx){cx.done=t.checked;changed();}}
