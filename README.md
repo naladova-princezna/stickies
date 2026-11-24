@@ -81,7 +81,20 @@ Stránka **Studium** je studijní pomocník navržený tak, aby ses neztratila v
 - **Přehled** ukazuje nahoře jedinou věc, která je teď na řadě (**Hotovo**, **Soustředit se** ve Stickies, **Posunout termín**). Pod ní je na řadě pár dalších věcí, týdenní pás s termíny a výukou, postup ke státnicím (kredity, průměr), kolik věcí jsi splnila za 7 dní a předměty tohoto semestru. Nový uživatel dostane krátkého průvodce nastavením.
 - **Termíny**: rychlé přidání jednou řádkou (text, předmět, termín jedním klepnutím, Enter), skupiny Dnes, Tento týden, Čeká na dořešení (klidná barva, žádná červená), Později, Bez termínu a Splněné. Každá skupina ukazuje jen pár položek, zbytek je za tlačítkem. Každá akce jde vrátit tlačítkem **Zpět**.
 - **Předměty**: kompaktní seznam, který se po klepnutí rozbalí na podmínky. Filtr semestru a statutu, **Vložit víc najednou** (jeden předmět na řádek, zkratka a kredity jsou volitelné). Splněné předměty jsou sbalené.
-- **Zápisy** z přednášek a cvičení, **Práce** (závěrečná práce: etapy, kapitoly, konzultace).
+- **Zápisy** z přednášek a cvičení, **Práce** (závěrečná práce, viz níže).
+
+#### Práce: týdenní sprint na psaní
+Sekce **Práce** (diplomová, bakalářská, disertační) je nástroj na to, aby se práce dala napsat v řádu dnů. Logika je v `diplomka.js` (bez DOM, jde spustit v Node), vykreslení v `studium.js`.
+- **Harmonogram**: práce rozdělená do fází s daty a úkoly (tvorba, schůzka, testování, psaní, odeslání). Tlačítko **Nastavit plán na 4 týdny** spočítá fáze od dneška (zbytek týdne, pak tři týdny po sobě), nastaví sprint na fázi Psaní a ukazuje, která fáze právě běží a za kolik dní se odesílá vedoucí. U kapitol jde zapnout **Lze psát dřív** (nezávisí na modelech ani testování) a aplikace spočítá, kolik stran denně ušetříš ve fázi Psaní.
+- **Sprint**: zadáš první a poslední den. Poslední den (od 4 dnů délky) je rezerva na revizi a odevzdání. Plán se pokaždé spočítá znovu z toho, co zbývá napsat, a rozloží se do zbývajících psacích dnů. Zameškaný den se nehromadí jako dluh, jen se mírně zvedne denní dávka. Dny jde označit jako **Volno**.
+- **Dnes napsat**: jedna dávka stran a v které kapitole. Dávka v plánu se po zápisu stran snižuje, po překročení je dnešek hotový a zbytek se přerozdělí. Tempo nad 8 stran denně je označené jako náročné, nad 12 jako příliš vysoké (obě hranice jsou odhad, ne měření, konstanty `HARD` a `OVER` v `diplomka.js`). Žádné červené hlášky.
+- **Zapsat stránky** přičte strany ke kapitole i do deníku psaní a jde vrátit tlačítkem Zpět.
+- **Nevím, kde začít**: navrhne jeden malý krok (další nehotový oddíl rozpracované kapitoly). Bez časovače.
+- **Kapitoly s oddíly**: každá má plánovaný rozsah, napsané strany, stav, poznámku a odškrtávací oddíly. **Vložit osnovu** nabídne obecné šablony (návrhová a ověřovací práce, teoretická práce) nebo vlastní text: kapitola na řádek, oddíly odsazené nebo s pomlčkou, rozsah na konci řádku třeba `(12)`. Šablony jsou obecné, uprav je podle své práce.
+- **Parkoviště**: když při psaní chybí zdroj nebo obrázek, zapíšeš to a píšeš dál. Zaparkované věci jdou přiřadit ke kapitole.
+- **Výstupy**: **Kostra do LaTeXu** (`\chapter`, `\section`, štítky, poznámky a parkoviště jako komentáře), **Brief pro Clauda** (osnova, stav, parkoviště a poslední konzultace jako text do chatu, u kapitoly zaměřený na ni) a **Vytisknout plán**.
+- **Před odevzdáním**: obecný kontrolní seznam, který si upravíš podle pokynů své katedry.
+- Nová pole jsou součástí `thesis` ve studiu (`sprint`, `log`, `parking`, `checklist`, u kapitol `target`, `note`, `sections`), starší data se při načtení doplní.
 - Každý uživatel má **vlastní studia**, jsou součástí jeho souboru `data/<jméno>.json` (klíč `studies`) a synchronizují se stejně jako úkoly. Nový uživatel začíná s prázdnou stránkou a tlačítkem **Přidat studium**.
 - **Tisk předmětů**: na stránce **Předměty** tlačítko *Vytisknout* vytiskne všechny předměty po semestrech: kód, název, kredity, statut, způsob ukončení a výsledek s datem. V okně tisku jde zvolit uložení do PDF.
 - **Záloha a import**: *Nastavení a záloha* stáhne nebo zkopíruje všechna studia, a načte je zpět (i z jiného profilu).
@@ -112,6 +125,7 @@ Co aplikace **neumí**: připomínky a upozornění, když máš zavřené okno.
 | `plan.js` | Výpočet doporučení na dnes |
 | `stats.js` | Statistiky a odhad energie |
 | `studium.html`, `studium.js`, `studium.css` | Stránka Studium (studia, předměty, deadliny, zápisy, závěrečná práce) |
+| `diplomka.js` | Logika sekce Práce: plán sprintu, osnova, zápis stran, LaTeX a brief |
 | `cloud.js` | Přihlášení a ukládání dat na Supabase |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline režim a instalace na mobil |
 

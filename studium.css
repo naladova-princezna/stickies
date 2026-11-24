@@ -427,3 +427,28 @@ main{gap:18px;padding-top:18px}
 .card.fold:hover{border-color:rgba(255,255,255,.18)}
 .minirow{padding:6px 0}
 @media (prefers-reduced-motion:reduce){.card,.btn,.bar>i{transition:none}.btn:active{transform:none}}
+
+/* ---------- Diplomka: sprint, plán, kapitoly, parkoviště ---------- */
+.plan{display:flex;flex-direction:column}
+.pday{display:flex;gap:12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line)}
+.pday:first-child{border-top:0}
+.pday .dlab{flex:none;width:136px;font-weight:600;font-variant-numeric:tabular-nums}
+.pday .dmain{flex:1;min-width:0;overflow-wrap:anywhere}
+.pday.today{background:var(--accent-soft);margin:0 -10px;padding:9px 10px;border-radius:8px;border-top-color:transparent}
+.pday.past .dmain,.pday.rest .dlab{color:var(--muted)}
+.pday.final .dmain{font-style:italic}
+.chx{border-top:1px solid var(--line);padding:2px 0 8px}
+.chx:first-child{border-top:0}
+.chx .chrow{border-top:0;padding-bottom:6px}
+.bar.slim{height:5px}
+.chdet{margin:8px 0 0;padding:10px 12px;border-radius:8px;background:var(--field)}
+.chdet .chk{padding:4px 0}
+.sdone{text-decoration:line-through;color:var(--muted)}
+.cnote{margin:8px 0 0;font-size:13.5px;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.hintbox{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent)}
+.note-warn{color:var(--warn)}
+.parkform{display:grid;grid-template-columns:1fr;gap:8px}
+.parkform input,.parkform select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--field);color:var(--ink);width:100%}
+@media(min-width:720px){.parkform{grid-template-columns:2fr 1fr 1fr auto;align-items:center}}
+.modal.wide{max-width:720px}
+@media(max-width:520px){.pday .dlab{width:100px}}
