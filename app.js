@@ -189,6 +189,7 @@
   /* Kariéra: cíl (jeden záznam id "goal") a kurzy. Peníze v celých Kč. */
   const CAREER_STATUS = ["prep", "plan", "idea", "done"];
   const PREP_UNITS = ["h", "d", "w", "m"];
+  const CAREER_PRIO = ["must", "should", "nice"];
   const money = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(10000000, Math.round(+v))) : 0);
   function nCareer(x) {
     if (!x || !x.id) return null;
@@ -203,6 +204,7 @@
           prep_n: Number.isFinite(+x.prep_n) ? Math.max(0, Math.min(999, Math.round(+x.prep_n))) : 0,
           prep_unit: PREP_UNITS.includes(x.prep_unit) ? x.prep_unit : "w",
           status: CAREER_STATUS.includes(x.status) ? x.status : "plan",
+          prio: CAREER_PRIO.includes(x.prio) ? x.prio : "should",
           next: String(x.next || "").slice(0, 200),
           note: String(x.note || "").slice(0, 1000),
           pos: Number(x.pos) || 0,
@@ -1828,12 +1830,20 @@
   const STATUS_LABEL = { prep: "Připravuju se", plan: "Chci udělat", idea: "Zvažuju", done: "Hotovo" };
   const STATUS_COLOR = { prep: "teal", plan: "violet", idea: "blue", done: "lime" };
   const UNIT_FORMS = { h: ["hodina", "hodiny", "hodin"], d: ["den", "dny", "dní"], w: ["týden", "týdny", "týdnů"], m: ["měsíc", "měsíce", "měsíců"] };
+  const PRIO_LABEL = { must: "Nutné", should: "Důležité", nice: "Bonus" };
+  const PRIO_HINT = {
+    must: "Bez těchhle se na pozici PM těžko dostaneš. Začni tady.",
+    should: "Posílí tě v pohovoru a v první práci.",
+    nice: "Až bude čas a peníze, nebo když to bude chtít konkrétní firma.",
+  };
+  const PRIO_SHOW = 6;
+  const prioOpen = new Set();
   const fmtPrep = (n, u) => `${n} ${plural(n, ...UNIT_FORMS[u])}`;
   const NF = new Intl.NumberFormat("cs-CZ");
   const kc = (v) => `${NF.format(v)} Kč`;
   const parseKc = (v) => { const n = Number(String(v || "").replace(/[\s ]/g, "").replace(/kč$/i, "").replace(",", ".")); return Number.isFinite(n) && n >= 0 ? Math.round(n) : NaN; };
   const liveCourses = () => (state.career || []).filter((x) => x.kind === "course" && !x.deleted)
-    .sort((a, b) => CAREER_STATUS.indexOf(a.status) - CAREER_STATUS.indexOf(b.status) || a.pos - b.pos);
+    .sort((a, b) => CAREER_PRIO.indexOf(a.prio) - CAREER_PRIO.indexOf(b.prio) || CAREER_STATUS.indexOf(a.status) - CAREER_STATUS.indexOf(b.status) || a.pos - b.pos);
   const missingOf = (c) => Math.max(0, c.price - c.paid - c.saved);
 
   function moneyBar(paid, saved, total, label) {
@@ -1851,7 +1861,9 @@
     return h("article", { class: `course c-${STATUS_COLOR[c.status]}${c.status === "done" ? " is-done" : ""}`, "data-k": "course:" + c.id },
       h("header", { class: "routine-head" },
         h("div", null,
-          h("span", { class: "due-pill" }, STATUS_LABEL[c.status]),
+          h("span", { class: "course-pills" },
+            h("span", { class: `prio-pill prio-${c.prio}` }, PRIO_LABEL[c.prio]),
+            h("span", { class: "due-pill" }, STATUS_LABEL[c.status])),
           h("h3", null, c.name),
           c.provider || c.url ? h("p", { class: "routine-meta" }, c.provider,
             c.url ? h("a", { href: c.url, target: "_blank", rel: "noopener", class: "course-link" }, c.provider ? " · web kurzu" : "Web kurzu") : null) : null),
@@ -1866,6 +1878,7 @@
       c.prep_n ? h("p", { class: "routine-meta" }, icon("clock"), ` Příprava: ${fmtPrep(c.prep_n, c.prep_unit)}`) : null,
       c.next && c.status !== "done" ? h("div", { class: "course-next" },
         h("span", { class: "course-next-l" }, "Další krok"), h("p", null, c.next)) : null,
+      c.note ? h("details", { class: "course-note" }, h("summary", null, "Proč a odkud cena"), h("p", null, c.note)) : null,
       c.status !== "done" ? h("div", { class: "course-actions" },
         c.price ? h("button", { type: "button", class: "btn course-btn", on: { click: () => openMoneyDialog(c.id) } }, "Přidat peníze") : null,
         c.next ? h("button", { type: "button", class: "btn course-btn", on: { click: () => nextToBacklog(c.id) } }, icon("plus"), "Krok do zásobníku") : null) : null);
@@ -1888,17 +1901,27 @@
 
     const sumBox = $("career-sum");
     sumBox.hidden = !all.length;
-    sumBox.replaceChildren(
+    sumBox.replaceChildren(...[
       h("header", { class: "panel-head" }, h("h2", null, "Peníze a čas")),
-      h("div", { class: "csum-grid" },
+      want.length ? h("div", { class: "csum-grid" },
         h("div", { class: "csum" }, h("span", null, "Kurzy stojí"), h("strong", null, kc(total))),
         h("div", { class: "csum" }, h("span", null, "Zaplaceno"), h("strong", null, kc(paid))),
         h("div", { class: "csum" }, h("span", null, "Našetřeno"), h("strong", null, kc(saved))),
-        h("div", { class: "csum csum-miss" }, h("span", null, "Ještě chybí"), h("strong", null, kc(miss)))),
+        h("div", { class: "csum csum-miss" }, h("span", null, "Ještě chybí"), h("strong", null, kc(miss)))) : null,
       total ? moneyBar(paid, saved, total, `Zaplaceno ${kc(paid)} a našetřeno ${kc(saved)} z ${kc(total)}`) : null,
+      h("div", { class: "csum-prio" }, ...CAREER_PRIO.map((p) => {
+        const l = all.filter((c) => c.prio === p && c.status !== "done");
+        return h("div", { class: `csum-p prio-${p}` },
+          h("span", { class: `prio-pill prio-${p}` }, PRIO_LABEL[p]),
+          h("strong", null, `${l.length} ${plural(l.length, "kurz", "kurzy", "kurzů")}`),
+          h("span", null, kc(l.reduce((a, c) => a + missingOf(c), 0)), " chybí"));
+      })),
       h("p", { class: "muted csum-note" },
         prepTxt ? `Příprava na kurzy, které tě čekají: ${prepTxt}. ` : "",
-        ideas.length ? `Kurzy, které jen zvažuješ (${ideas.length}, ${kc(sum(ideas, "price"))}), v součtu nejsou.` : ""));
+        ideas.length ? (want.length
+          ? `Kurzy, které jen zvažuješ (${ideas.length}, ${kc(sum(ideas, "price"))}), v horním součtu nejsou.`
+          : `Všech ${ideas.length} ${plural(ideas.length, "kurz", "kurzy", "kurzů")} zatím jen zvažuješ. Až si u kurzu nastavíš stav „Chci udělat“, započítá se do peněz a času.`) : ""),
+    ].filter(Boolean));
 
     const box = $("course-list");
     if (!all.length) {
@@ -1910,7 +1933,20 @@
       return;
     }
     const open = all.filter((c) => c.status !== "done"), done = all.filter((c) => c.status === "done");
-    box.replaceChildren(...(open.length ? open.map(courseCard) : [h("p", { class: "muted" }, "Všechny kurzy máš hotové.")]));
+    box.replaceChildren(...(open.length ? CAREER_PRIO.map((p) => {
+      const l = open.filter((c) => c.prio === p);
+      if (!l.length) return null;
+      const more = l.length > PRIO_SHOW && !prioOpen.has(p);
+      return h("section", { class: `course-group prio-${p}`, "data-k": "cg:" + p },
+        h("header", { class: "course-group-head" },
+          h("h2", null, h("span", { class: `prio-pill prio-${p}` }, PRIO_LABEL[p]), h("span", { class: "count" }, l.length)),
+          h("p", { class: "muted" }, PRIO_HINT[p])),
+        h("div", { class: "routine-grid course-grid" }, ...(more ? l.slice(0, PRIO_SHOW) : l).map(courseCard)),
+        l.length > PRIO_SHOW ? h("button", { type: "button", class: "btn course-more", on: { click: () => {
+          if (prioOpen.has(p)) prioOpen.delete(p); else prioOpen.add(p);
+          renderCareer();
+        } } }, more ? `Ukázat dalších ${l.length - PRIO_SHOW}` : "Ukázat méně") : null);
+    }).filter(Boolean) : [h("p", { class: "muted" }, "Všechny kurzy máš hotové.")]));
     $("course-done").hidden = !done.length;
     $("course-done-n").textContent = done.length;
     $("course-done-list").replaceChildren(...done.map(courseCard));
@@ -1929,10 +1965,11 @@
   function openCourseDialog(id) {
     courseEditId = id || null;
     const c = id ? liveCourses().find((x) => x.id === id) : null;
-    const p = c || { name: "", provider: "", url: "", price: 0, paid: 0, saved: 0, prep_n: 0, prep_unit: "w", status: "plan", next: "", note: "" };
+    const p = c || { name: "", provider: "", url: "", price: 0, paid: 0, saved: 0, prep_n: 0, prep_unit: "w", status: "plan", prio: "should", next: "", note: "" };
     $("co-title").textContent = c ? "Upravit kurz" : "Nový kurz";
     $("co-name").value = p.name; $("co-provider").value = p.provider; $("co-url").value = p.url;
     $("co-status").replaceChildren(...CAREER_STATUS.map((v) => h("option", Object.assign({ value: v }, v === p.status ? { selected: true } : {}), STATUS_LABEL[v])));
+    $("co-prio").replaceChildren(...CAREER_PRIO.map((v) => h("option", Object.assign({ value: v }, v === p.prio ? { selected: true } : {}), PRIO_LABEL[v])));
     $("co-price").value = p.price || ""; $("co-paid").value = p.paid || ""; $("co-saved").value = p.saved || "";
     $("co-prep").value = p.prep_n || "";
     $("co-unit").replaceChildren(...PREP_UNITS.map((u) => h("option", Object.assign({ value: u }, u === p.prep_unit ? { selected: true } : {}), UNIT_FORMS[u][2])));
@@ -1962,7 +1999,7 @@
     if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
     const fields = nCareer({
       id: courseEditId || uuid(), name, provider: $("co-provider").value.trim(), url, price, paid, saved, prep_n,
-      prep_unit: $("co-unit").value, status: $("co-status").value, next: $("co-next").value.trim(), note: $("co-note").value.trim(), pos: Date.now(),
+      prep_unit: $("co-unit").value, status: $("co-status").value, prio: $("co-prio").value, next: $("co-next").value.trim(), note: $("co-note").value.trim(), pos: Date.now(),
     });
     commit((s) => {
       s.career = s.career || [];
@@ -2276,11 +2313,13 @@
       if (!raw || !Array.isArray(raw.tasks) || !Array.isArray(raw.categories)) throw new Error("bad");
       const incoming = normalize(raw);
       const before = liveTasks().length;
+      const beforeC = (state.career || []).filter((x) => x.kind === "course" && !x.deleted).length;
       state = merge(state, incoming);
       reconcileStudyLinks();
       version++; meta.dirty = true; persist(); render(); scheduleSave();
       $("store-dialog").close();
-      toast(`Záloha načtena. Přibylo ${Math.max(0, liveTasks().length - before)} úkolů.`);
+      const addC = Math.max(0, (state.career || []).filter((x) => x.kind === "course" && !x.deleted).length - beforeC);
+      toast(`Záloha načtena. Přibylo ${Math.max(0, liveTasks().length - before)} úkolů${addC ? ` a ${addC} ${plural(addC, "kurz", "kurzy", "kurzů")}` : ""}.`);
     } catch {
       $("st-error").textContent = "Tenhle soubor nevypadá jako záloha ze Stickies.";
     }

@@ -77,6 +77,8 @@ Jak odhad vzniká (kód je v `stats.js`, testy na umělých datech ověřují, �
 **Je to statistika z tvých vlastních záznamů, ne měření a ne zdravotní pomůcka.** Čím víc dní zadáš, tím lepší odhad. Nepravidelný život (nemoc, cestování, zkouškové) odhad zhorší. Když ti nesedí, ignoruj ho.
 
 ### Kariéra
+
+Každý kurz má prioritu **Nutné / Důležité / Bonus**. Seznam je rozdělený do skupin podle priority, v každé je vidět prvních 6 karet a zbytek se rozbalí tlačítkem. Kurzy jde hromadně nahrát přes Účet a záloha → Načíst zálohu (JSON s polem `career`).
 Stránka **Kariéra** v menu je malé kariérní poradenství: nahoře tvůj cíl, pod ním kurzy a certifikace, které k němu potřebuješ.
 - U kurzu zadáš cenu, kolik je **zaplaceno** a kolik máš **našetřeno** (odloženo stranou), jak dlouho trvá **příprava** (hodiny, dny, týdny, měsíce), stav (*Zvažuju*, *Chci udělat*, *Připravuju se*, *Hotovo*) a **další krok**.
 - **Přidat peníze** zapíše, že sis něco odložila, nebo že jsi zaplatila (volitelně z našetřených peněz).
