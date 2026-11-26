@@ -291,7 +291,7 @@
             <p class="fine">Uloží se, jakmile klikneš jinam.</p>
           </section>
           <section id="career-sum" class="panel career-sum" aria-label="Peníze a čas" hidden></section>
-          <div id="course-list" class="routine-grid course-grid"></div>
+          <div id="course-list" class="course-groups"></div>
           <details id="course-done" class="panel archive" hidden>
             <summary><span>Hotové kurzy</span><span class="count" id="course-done-n">0</span><svg class="i chev"><use href="#i-chevron"/></svg></summary>
             <div id="course-done-list" class="routine-grid course-grid"></div>
@@ -450,8 +450,9 @@
         <label for="co-name">Název kurzu nebo certifikace</label>
         <input id="co-name" type="text" maxlength="80" autocomplete="off" placeholder="např. IPMA Level D">
       </div>
+      <div class="field"><label for="co-provider">Kdo ho pořádá</label><input id="co-provider" type="text" maxlength="80" autocomplete="off"></div>
       <div class="two">
-        <div class="field"><label for="co-provider">Kdo ho pořádá</label><input id="co-provider" type="text" maxlength="80" autocomplete="off"></div>
+        <div class="field"><label for="co-prio">Priorita</label><select id="co-prio"></select></div>
         <div class="field"><label for="co-status">Stav</label><select id="co-status"></select></div>
       </div>
       <div class="field"><label for="co-url">Odkaz na kurz</label><input id="co-url" type="url" maxlength="300" autocomplete="off" inputmode="url" placeholder="https://…"></div>
