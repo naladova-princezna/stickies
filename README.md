@@ -76,6 +76,14 @@ Jak odhad vzniká (kód je v `stats.js`, testy na umělých datech ověřují, �
 
 **Je to statistika z tvých vlastních záznamů, ne měření a ne zdravotní pomůcka.** Čím víc dní zadáš, tím lepší odhad. Nepravidelný život (nemoc, cestování, zkouškové) odhad zhorší. Když ti nesedí, ignoruj ho.
 
+### Kariéra
+Stránka **Kariéra** v menu je malé kariérní poradenství: nahoře tvůj cíl, pod ním kurzy a certifikace, které k němu potřebuješ.
+- U kurzu zadáš cenu, kolik je **zaplaceno** a kolik máš **našetřeno** (odloženo stranou), jak dlouho trvá **příprava** (hodiny, dny, týdny, měsíce), stav (*Zvažuju*, *Chci udělat*, *Připravuju se*, *Hotovo*) a **další krok**.
+- **Přidat peníze** zapíše, že sis něco odložila, nebo že jsi zaplatila (volitelně z našetřených peněz).
+- **Krok do zásobníku** vloží další krok jako úkol do kategorie *Kariéra* (když ji máš), jinak do naposledy použité kategorie.
+- Souhrn **Peníze a čas** sčítá kurzy kromě těch, které jen zvažuješ: kolik stojí, kolik je zaplaceno, našetřeno a kolik ještě chybí, a délku přípravy.
+- Kurzy jsou součástí dat uživatele (`career`) a synchronizují se stejně jako úkoly.
+
 ### Studium
 Stránka **Studium** je studijní pomocník navržený tak, aby ses neztratila v povinnostech. Více studií vedle sebe (bakalářské, navazující, jiné).
 - **Přehled** ukazuje nahoře jedinou věc, která je teď na řadě (**Hotovo**, **Soustředit se** ve Stickies, **Posunout termín**). Pod ní je na řadě pár dalších věcí, týdenní pás s termíny a výukou, postup ke státnicím (kredity, průměr), kolik věcí jsi splnila za 7 dní a předměty tohoto semestru. Nový uživatel dostane krátkého průvodce nastavením.

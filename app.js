@@ -186,6 +186,32 @@
     return o;
   }
 
+  /* Kariéra: cíl (jeden záznam id "goal") a kurzy. Peníze v celých Kč. */
+  const CAREER_STATUS = ["prep", "plan", "idea", "done"];
+  const PREP_UNITS = ["h", "d", "w", "m"];
+  const money = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(10000000, Math.round(+v))) : 0);
+  function nCareer(x) {
+    if (!x || !x.id) return null;
+    const o = x.id === "goal"
+      ? { id: "goal", kind: "goal", text: String(x.text || "").slice(0, 400), updated_at: x.updated_at || EPOCH }
+      : {
+          id: String(x.id), kind: "course",
+          name: String(x.name || "Kurz").slice(0, 80),
+          provider: String(x.provider || "").slice(0, 80),
+          url: /^https?:\/\//i.test(String(x.url || "")) ? String(x.url).slice(0, 300) : "",
+          price: money(x.price), paid: money(x.paid), saved: money(x.saved),
+          prep_n: Number.isFinite(+x.prep_n) ? Math.max(0, Math.min(999, Math.round(+x.prep_n))) : 0,
+          prep_unit: PREP_UNITS.includes(x.prep_unit) ? x.prep_unit : "w",
+          status: CAREER_STATUS.includes(x.status) ? x.status : "plan",
+          next: String(x.next || "").slice(0, 200),
+          note: String(x.note || "").slice(0, 1000),
+          pos: Number(x.pos) || 0,
+          updated_at: x.updated_at || EPOCH,
+        };
+    if (x.deleted) o.deleted = true;
+    return o;
+  }
+
   function normalize(raw) {
     const r = raw && typeof raw === "object" ? raw : {};
     const cats = (Array.isArray(r.categories) ? r.categories : []).filter((x) => x && x.id).map(nCat);
@@ -196,7 +222,8 @@
     const legacy = nDayRec(r.day);                       // starší verze ukládaly jen dnešek
     if (legacy && legacy.set && !map.has(legacy.id)) map.set(legacy.id, legacy);
     const studies = (Array.isArray(r.studies) ? r.studies : []).filter((x) => x && x.id).map(nStudy);
-    return { categories: cats, tasks, routines, days: [...map.values()], studies };
+    const career = (Array.isArray(r.career) ? r.career : []).map(nCareer).filter(Boolean);
+    return { categories: cats, tasks, routines, days: [...map.values()], studies, career };
   }
 
   const canon = (s) => stable({
@@ -205,6 +232,7 @@
     r: [...(s.routines || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     d: [...(s.days || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
     s: [...(s.studies || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    k: [...(s.career || [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
   });
 
   function pickNewer(x, y) {
@@ -229,6 +257,7 @@
     const routines = mergeLists(a.routines || [], b.routines || []);
     const days = mergeLists(a.days || [], b.days || []);
     const studies = mergeLists(a.studies || [], b.studies || []);
+    const career = mergeLists(a.career || [], b.career || []);
     const alive = new Set(cats.filter((c) => !c.deleted).map((c) => c.id));
     const now = nowIso();
     for (const r of routines) {
@@ -239,14 +268,14 @@
     }
     const limit = Date.now() - TOMBSTONE_DAYS * 864e5;
     const fresh = (x) => !(x.deleted && (Date.parse(x.updated_at) || 0) < limit);
-    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh) };
+    return { categories: cats.filter(fresh), tasks: tasks.filter(fresh), routines: routines.filter(fresh), days: days.filter(fresh), studies: studies.filter(fresh), career: career.filter(fresh) };
   }
 
   /** Změněným záznamům nastaví updated_at. */
   function touch(prev, next) {
     const now = nowIso();
     const strip = (o) => { const c = { ...o }; delete c.updated_at; return stable(c); };
-    for (const key of ["categories", "tasks", "routines", "days", "studies"]) {
+    for (const key of ["categories", "tasks", "routines", "days", "studies", "career"]) {
       const pm = new Map((prev[key] || []).map((x) => [x.id, strip(x)]));
       for (const x of next[key] || []) if (pm.get(x.id) !== strip(x)) x.updated_at = now;
     }
@@ -255,7 +284,7 @@
   /* =====================================================================
      Stav, uložení
      ===================================================================== */
-  let state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
+  let state = { categories: [], tasks: [], routines: [], days: [], studies: [], career: [] };
   let meta = { sha: null, dirty: false };
   let gh = null;                    // {repo, token, path, branch}
   let version = 0;                  // počítadlo lokálních změn
@@ -405,7 +434,7 @@
           if (snapVer === version) meta.dirty = false;
           settled = true;
         } else {
-          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [] }, remote ? remote.sha : null);
+          const res = await ghPutFile({ categories: merged.categories, tasks: merged.tasks, routines: merged.routines || [], days: merged.days || [], studies: merged.studies || [], career: merged.career || [] }, remote ? remote.sha : null);
           if (res.conflict) continue;
           meta.sha = res.sha;
           if (snapVer === version) meta.dirty = false;
@@ -774,7 +803,7 @@
   let ROUTE = { name: "dnes" };
 
   function parseRoute() {
-    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|prehled|kat|studium)(?:\/([\w-]+))?$/);
+    const m = (location.hash || "").match(/^#\/(dnes|zasobnik|rutiny|prehled|kat|studium|kariera)(?:\/([\w-]+))?$/);
     if (!m) return { name: "dnes" };
     if (m[1] === "studium") return { name: "studium", sub: m[2] || "" };
     if (m[1] === "kat") return catById(m[2]) ? { name: "kat", id: m[2] } : { name: "dnes", fix: true };
@@ -814,11 +843,13 @@
     $("view-routines").hidden = ROUTE.name !== "rutiny";
     $("view-stats").hidden = ROUTE.name !== "prehled";
     $("view-study").hidden = ROUTE.name !== "studium";
+    $("view-career").hidden = ROUTE.name !== "kariera";
     if (ROUTE.name === "dnes") renderToday();
     else if (ROUTE.name === "zasobnik") renderBacklog();
     else if (ROUTE.name === "rutiny") renderRoutines();
     else if (ROUTE.name === "prehled") renderStats();
     else if (ROUTE.name === "studium") renderStudy();
+    else if (ROUTE.name === "kariera") renderCareer();
     else renderCat();
     renderComposerOptions();
     setTitle();
@@ -1793,6 +1824,209 @@
     $("routine-dialog").close();
   });
 
+  /* ---------- Kariéra: cíl, kurzy, peníze a příprava ---------- */
+  const STATUS_LABEL = { prep: "Připravuju se", plan: "Chci udělat", idea: "Zvažuju", done: "Hotovo" };
+  const STATUS_COLOR = { prep: "teal", plan: "violet", idea: "blue", done: "lime" };
+  const UNIT_FORMS = { h: ["hodina", "hodiny", "hodin"], d: ["den", "dny", "dní"], w: ["týden", "týdny", "týdnů"], m: ["měsíc", "měsíce", "měsíců"] };
+  const fmtPrep = (n, u) => `${n} ${plural(n, ...UNIT_FORMS[u])}`;
+  const NF = new Intl.NumberFormat("cs-CZ");
+  const kc = (v) => `${NF.format(v)} Kč`;
+  const parseKc = (v) => { const n = Number(String(v || "").replace(/[\s ]/g, "").replace(/kč$/i, "").replace(",", ".")); return Number.isFinite(n) && n >= 0 ? Math.round(n) : NaN; };
+  const liveCourses = () => (state.career || []).filter((x) => x.kind === "course" && !x.deleted)
+    .sort((a, b) => CAREER_STATUS.indexOf(a.status) - CAREER_STATUS.indexOf(b.status) || a.pos - b.pos);
+  const missingOf = (c) => Math.max(0, c.price - c.paid - c.saved);
+
+  function moneyBar(paid, saved, total, label) {
+    const pct = (v) => (total > 0 ? Math.min(100, (v / total) * 100) : 0);
+    const p = pct(paid), s = Math.min(100 - p, pct(saved));
+    return h("div", { class: "cbar", role: "img", "aria-label": label },
+      h("span", { class: "cbar-paid", style: `width:${p}%` }), h("span", { class: "cbar-saved", style: `width:${s}%` }));
+  }
+
+  function courseCard(c) {
+    const miss = missingOf(c), over = c.paid + c.saved - c.price;
+    const moneyLine = c.price
+      ? (miss ? `Chybí ${kc(miss)}` : c.paid >= c.price ? "Zaplaceno celé" : over > 0 ? `Našetřeno celé, navíc ${kc(over)}` : "Našetřeno celé, zbývá zaplatit")
+      : "Zdarma nebo bez ceny";
+    return h("article", { class: `course c-${STATUS_COLOR[c.status]}${c.status === "done" ? " is-done" : ""}`, "data-k": "course:" + c.id },
+      h("header", { class: "routine-head" },
+        h("div", null,
+          h("span", { class: "due-pill" }, STATUS_LABEL[c.status]),
+          h("h3", null, c.name),
+          c.provider || c.url ? h("p", { class: "routine-meta" }, c.provider,
+            c.url ? h("a", { href: c.url, target: "_blank", rel: "noopener", class: "course-link" }, c.provider ? " · web kurzu" : "Web kurzu") : null) : null),
+        iconBtn("edit", "Upravit kurz", () => openCourseDialog(c.id), "course-edit:" + c.id)),
+      c.price ? h("div", { class: "course-money" },
+        h("div", { class: "course-row" }, h("strong", null, kc(c.price)), h("span", null, moneyLine)),
+        moneyBar(c.paid, c.saved, c.price, `Zaplaceno ${kc(c.paid)}, našetřeno ${kc(c.saved)} z ${kc(c.price)}`),
+        h("p", { class: "course-legend" },
+          h("span", { class: "lg-item" }, h("span", { class: "lg lg-paid" }), `Zaplaceno ${kc(c.paid)}`),
+          h("span", { class: "lg-item" }, h("span", { class: "lg lg-saved" }), `Našetřeno ${kc(c.saved)}`)))
+        : h("p", { class: "routine-meta" }, moneyLine),
+      c.prep_n ? h("p", { class: "routine-meta" }, icon("clock"), ` Příprava: ${fmtPrep(c.prep_n, c.prep_unit)}`) : null,
+      c.next && c.status !== "done" ? h("div", { class: "course-next" },
+        h("span", { class: "course-next-l" }, "Další krok"), h("p", null, c.next)) : null,
+      c.status !== "done" ? h("div", { class: "course-actions" },
+        c.price ? h("button", { type: "button", class: "btn course-btn", on: { click: () => openMoneyDialog(c.id) } }, "Přidat peníze") : null,
+        c.next ? h("button", { type: "button", class: "btn course-btn", on: { click: () => nextToBacklog(c.id) } }, icon("plus"), "Krok do zásobníku") : null) : null);
+  }
+
+  function renderCareer() {
+    const goal = (state.career || []).find((x) => x.id === "goal" && !x.deleted);
+    const ta = $("career-goal");
+    if (document.activeElement !== ta) ta.value = goal ? goal.text : "";
+    const all = liveCourses();
+    const want = all.filter((c) => c.status !== "idea");
+    const ideas = all.filter((c) => c.status === "idea");
+    const sum = (l, k) => l.reduce((a, c) => a + c[k], 0);
+    const total = sum(want, "price"), paid = sum(want, "paid"), saved = sum(want, "saved");
+    const miss = want.reduce((a, c) => a + missingOf(c), 0);
+    const prep = {};
+    for (const c of want) if (c.status !== "done" && c.prep_n) prep[c.prep_unit] = (prep[c.prep_unit] || 0) + c.prep_n;
+    const prepTxt = PREP_UNITS.filter((u) => prep[u]).map((u) => fmtPrep(prep[u], u)).join(" + ");
+    $("course-count").textContent = all.length;
+
+    const sumBox = $("career-sum");
+    sumBox.hidden = !all.length;
+    sumBox.replaceChildren(
+      h("header", { class: "panel-head" }, h("h2", null, "Peníze a čas")),
+      h("div", { class: "csum-grid" },
+        h("div", { class: "csum" }, h("span", null, "Kurzy stojí"), h("strong", null, kc(total))),
+        h("div", { class: "csum" }, h("span", null, "Zaplaceno"), h("strong", null, kc(paid))),
+        h("div", { class: "csum" }, h("span", null, "Našetřeno"), h("strong", null, kc(saved))),
+        h("div", { class: "csum csum-miss" }, h("span", null, "Ještě chybí"), h("strong", null, kc(miss)))),
+      total ? moneyBar(paid, saved, total, `Zaplaceno ${kc(paid)} a našetřeno ${kc(saved)} z ${kc(total)}`) : null,
+      h("p", { class: "muted csum-note" },
+        prepTxt ? `Příprava na kurzy, které tě čekají: ${prepTxt}. ` : "",
+        ideas.length ? `Kurzy, které jen zvažuješ (${ideas.length}, ${kc(sum(ideas, "price"))}), v součtu nejsou.` : ""));
+
+    const box = $("course-list");
+    if (!all.length) {
+      box.replaceChildren(h("div", { class: "empty routine-welcome" },
+        h("strong", null, "Zatím tu nemáš žádný kurz"),
+        h("p", null, "Zapiš si kurzy a certifikace, které k cíli potřebuješ. U každého uvidíš, kolik stojí, kolik už máš zaplaceno a našetřeno a jak dlouho trvá příprava."),
+        h("button", { type: "button", class: "btn btn-primary", on: { click: () => openCourseDialog() } }, "Přidat první kurz")));
+      $("course-done").hidden = true;
+      return;
+    }
+    const open = all.filter((c) => c.status !== "done"), done = all.filter((c) => c.status === "done");
+    box.replaceChildren(...(open.length ? open.map(courseCard) : [h("p", { class: "muted" }, "Všechny kurzy máš hotové.")]));
+    $("course-done").hidden = !done.length;
+    $("course-done-n").textContent = done.length;
+    $("course-done-list").replaceChildren(...done.map(courseCard));
+  }
+
+  $("career-goal").addEventListener("change", () => {
+    const text = $("career-goal").value.trim().slice(0, 400);
+    commit((s) => {
+      s.career = s.career || [];
+      const g = s.career.find((x) => x.id === "goal");
+      if (g) { g.text = text; delete g.deleted; } else s.career.push({ id: "goal", kind: "goal", text, updated_at: nowIso() });
+    });
+  });
+
+  let courseEditId = null;
+  function openCourseDialog(id) {
+    courseEditId = id || null;
+    const c = id ? liveCourses().find((x) => x.id === id) : null;
+    const p = c || { name: "", provider: "", url: "", price: 0, paid: 0, saved: 0, prep_n: 0, prep_unit: "w", status: "plan", next: "", note: "" };
+    $("co-title").textContent = c ? "Upravit kurz" : "Nový kurz";
+    $("co-name").value = p.name; $("co-provider").value = p.provider; $("co-url").value = p.url;
+    $("co-status").replaceChildren(...CAREER_STATUS.map((v) => h("option", Object.assign({ value: v }, v === p.status ? { selected: true } : {}), STATUS_LABEL[v])));
+    $("co-price").value = p.price || ""; $("co-paid").value = p.paid || ""; $("co-saved").value = p.saved || "";
+    $("co-prep").value = p.prep_n || "";
+    $("co-unit").replaceChildren(...PREP_UNITS.map((u) => h("option", Object.assign({ value: u }, u === p.prep_unit ? { selected: true } : {}), UNIT_FORMS[u][2])));
+    $("co-next").value = p.next; $("co-note").value = p.note;
+    $("co-error").textContent = "";
+    $("co-delete").hidden = !c;
+    closeSide();
+    $("course-dialog").showModal();
+    $("co-name").focus();
+  }
+
+  $("course-new").addEventListener("click", () => openCourseDialog());
+
+  $("course-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const err = (m, el) => { $("co-error").textContent = m; el.focus(); };
+    const name = $("co-name").value.trim();
+    if (!name) return err("Napiš název kurzu.", $("co-name"));
+    const price = parseKc($("co-price").value), paid = parseKc($("co-paid").value), saved = parseKc($("co-saved").value);
+    if (Number.isNaN(price)) return err("Cenu napiš jako číslo v Kč, třeba 12 500.", $("co-price"));
+    if (Number.isNaN(paid)) return err("Zaplacenou částku napiš jako číslo v Kč.", $("co-paid"));
+    if (Number.isNaN(saved)) return err("Našetřenou částku napiš jako číslo v Kč.", $("co-saved"));
+    if (price && paid > price) return err("Zaplaceno je víc než cena kurzu. Zkontroluj částky.", $("co-paid"));
+    const prepRaw = $("co-prep").value.trim(), prep_n = prepRaw ? Math.round(Number(prepRaw.replace(",", "."))) : 0;
+    if (!Number.isFinite(prep_n) || prep_n < 0) return err("Délku přípravy napiš jako číslo.", $("co-prep"));
+    let url = $("co-url").value.trim();
+    if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+    const fields = nCareer({
+      id: courseEditId || uuid(), name, provider: $("co-provider").value.trim(), url, price, paid, saved, prep_n,
+      prep_unit: $("co-unit").value, status: $("co-status").value, next: $("co-next").value.trim(), note: $("co-note").value.trim(), pos: Date.now(),
+    });
+    commit((s) => {
+      s.career = s.career || [];
+      const old = courseEditId ? s.career.find((x) => x.id === courseEditId) : null;
+      if (old) { const pos = old.pos; Object.assign(old, fields, { pos, updated_at: old.updated_at }); }
+      else s.career.push(Object.assign(fields, { updated_at: nowIso() }));
+    });
+    $("course-dialog").close();
+    toast(courseEditId ? "Kurz uložen." : `Kurz „${name}“ přidán.`);
+  });
+
+  $("co-delete").addEventListener("click", () => {
+    const id = courseEditId, c = liveCourses().find((x) => x.id === id);
+    if (!c) return;
+    commit((s) => { s.career.find((x) => x.id === id).deleted = true; }, `Kurz „${c.name}“ smazán.`);
+    $("course-dialog").close();
+  });
+
+  let moneyId = null;
+  function openMoneyDialog(id) {
+    const c = liveCourses().find((x) => x.id === id);
+    if (!c) return;
+    moneyId = id;
+    $("mo-title").textContent = c.name;
+    $("mo-info").textContent = `Cena ${kc(c.price)} · zaplaceno ${kc(c.paid)} · našetřeno ${kc(c.saved)} · chybí ${kc(missingOf(c))}`;
+    $("mo-amount").value = "";
+    $("mo-kind-save").checked = true;
+    $("mo-from-saved").checked = true;
+    $("mo-from-wrap").hidden = true;
+    $("mo-error").textContent = "";
+    $("money-dialog").showModal();
+    $("mo-amount").focus();
+  }
+  for (const id of ["mo-kind-save", "mo-kind-pay"]) $(id).addEventListener("change", () => { $("mo-from-wrap").hidden = !$("mo-kind-pay").checked; });
+
+  $("money-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const c = liveCourses().find((x) => x.id === moneyId);
+    if (!c) { $("money-dialog").close(); return; }
+    const amt = parseKc($("mo-amount").value);
+    if (!amt) { $("mo-error").textContent = "Napiš částku v Kč, třeba 2 000."; $("mo-amount").focus(); return; }
+    const pay = $("mo-kind-pay").checked, fromSaved = $("mo-from-saved").checked;
+    if (pay && c.price && c.paid + amt > c.price) { $("mo-error").textContent = `Do plné ceny zbývá zaplatit jen ${kc(c.price - c.paid)}.`; $("mo-amount").focus(); return; }
+    commit((s) => {
+      const x = s.career.find((y) => y.id === moneyId);
+      if (pay) { x.paid += amt; if (fromSaved) x.saved = Math.max(0, x.saved - amt); }
+      else x.saved += amt;
+    }, pay ? `Zapsáno: zaplaceno ${kc(amt)}.` : `Zapsáno: našetřeno ${kc(amt)}.`);
+    $("money-dialog").close();
+  });
+
+  function nextToBacklog(id) {
+    const c = liveCourses().find((x) => x.id === id);
+    if (!c || !c.next) return;
+    const cats = liveCats();
+    if (!cats.length) { toast("Nejdřív vytvoř kategorii."); openCatDialog(); return; }
+    const cat = cats.find((k) => k.name.trim().toLowerCase() === "kariéra") || cats.find((k) => k.id === store.get(K.lastcat, "")) || cats[0];
+    const text = `${c.name}: ${c.next}`.slice(0, 200);
+    if (liveTasks().some((t) => t.status !== "done" && t.text === text)) { toast("Tenhle krok už v úkolech máš."); return; }
+    commit((s) => {
+      s.tasks.push({ id: uuid(), category_id: cat.id, text, status: "backlog", done_at: null, pos: Date.now(), effort: "medium", lane: "prio", steps: [], updated_at: nowIso() });
+    }, `Krok přidán do kategorie ${cat.name}.`, { action: { label: "Otevřít", fn: () => { location.hash = "#/kat/" + cat.id; } } });
+  }
+
   /* ---------- Přehled: historie, statistiky, odhad ---------- */
   const svgEl = (tag, attrs, ...kids) => {
     const e = document.createElementNS(NS, tag);
@@ -2125,7 +2359,7 @@
   }
 
   function pageTitle() {
-    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : ROUTE.name === "rutiny" ? "Rutiny · Stickies" : ROUTE.name === "prehled" ? "Přehled · Stickies" : "Dnes · Stickies";
+    return ROUTE.name === "kat" && catById(ROUTE.id) ? `${catById(ROUTE.id).name} · Stickies` : ROUTE.name === "zasobnik" ? "Zásobník · Stickies" : ROUTE.name === "rutiny" ? "Rutiny · Stickies" : ROUTE.name === "prehled" ? "Přehled · Stickies" : ROUTE.name === "kariera" ? "Kariéra · Stickies" : "Dnes · Stickies";
   }
   function setTitle() { document.title = focus.running ? `⏱ ${fmtClock(focus.left)} · Stickies` : pageTitle(); }
 
@@ -2377,7 +2611,7 @@
     buildSeg($("add-effort"), "add-effort", "medium");
     buildPresets();
     if (needsSeed()) {
-      state = { categories: [], tasks: [], routines: [], days: [], studies: [] };
+      state = { categories: [], tasks: [], routines: [], days: [], studies: [], career: [] };
       seedDefaults();
     }
     if (reconcileStudyLinks()) { version++; meta.dirty = true; persist(); }
