@@ -52,6 +52,7 @@
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5Z"/><path d="M4 21.5V5.5"/><path d="M9 8h7M9 12h5"/></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 13h18"/></symbol>
     <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="9" rx="2"/><path d="M7 14h10v7H7z"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20Z"/><path d="M12 10v5M12 18h.01"/></symbol>
   </svg>
@@ -98,6 +99,7 @@
         <a class="nav-item" href="#/rutiny" data-route="rutiny"><svg class="i"><use href="#i-repeat"/></svg><span>Rutiny</span><b id="nav-routines-n" class="nav-n" hidden></b></a>
         <a class="nav-item" href="#/prehled" data-route="prehled"><svg class="i"><use href="#i-chart"/></svg><span>Přehled</span></a>
         <a class="nav-item" href="#/studium" data-route="studium"><svg class="i"><use href="#i-book"/></svg><span>Studium</span></a>
+        <a class="nav-item" href="#/kariera" data-route="kariera"><svg class="i"><use href="#i-briefcase"/></svg><span>Kariéra</span></a>
       </nav>
 
       <div class="side-section">
@@ -270,6 +272,32 @@
           <div id="study-box" class="study-box"></div>
         </section>
 
+        <!-- ===== Kariéra ===== -->
+        <section id="view-career" class="view" aria-labelledby="h-career" hidden>
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Kam mířím a co k tomu potřebuju</p>
+              <h1 id="h-career">Kariéra</h1>
+            </div>
+            <div class="head-actions">
+              <button id="course-new" class="btn btn-primary" type="button"><svg class="i"><use href="#i-plus"/></svg>Nový kurz</button>
+              <span class="count count-lg" id="course-count">0</span>
+            </div>
+          </div>
+          <section class="panel career-goal" aria-labelledby="h-goal">
+            <header class="panel-head"><h2 id="h-goal">Můj cíl</h2></header>
+            <label class="sr-only" for="career-goal">Můj kariérní cíl</label>
+            <textarea id="career-goal" rows="2" maxlength="400" placeholder="Např. projektová manažerka v technologiích a průmyslu"></textarea>
+            <p class="fine">Uloží se, jakmile klikneš jinam.</p>
+          </section>
+          <section id="career-sum" class="panel career-sum" aria-label="Peníze a čas" hidden></section>
+          <div id="course-list" class="routine-grid course-grid"></div>
+          <details id="course-done" class="panel archive" hidden>
+            <summary><span>Hotové kurzy</span><span class="count" id="course-done-n">0</span><svg class="i chev"><use href="#i-chevron"/></svg></summary>
+            <div id="course-done-list" class="routine-grid course-grid"></div>
+          </details>
+        </section>
+
         <!-- ===== Kategorie ===== -->
         <section id="view-cat" class="view" aria-labelledby="h-cat" hidden>
           <div class="page-head">
@@ -411,6 +439,60 @@
         <span class="grow"></span>
         <button type="button" class="btn" data-close>Zrušit</button>
         <button type="submit" class="btn btn-primary">Uložit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="course-dialog" aria-labelledby="co-title">
+    <form id="course-form" novalidate>
+      <h2 id="co-title">Nový kurz</h2>
+      <div class="field">
+        <label for="co-name">Název kurzu nebo certifikace</label>
+        <input id="co-name" type="text" maxlength="80" autocomplete="off" placeholder="např. IPMA Level D">
+      </div>
+      <div class="two">
+        <div class="field"><label for="co-provider">Kdo ho pořádá</label><input id="co-provider" type="text" maxlength="80" autocomplete="off"></div>
+        <div class="field"><label for="co-status">Stav</label><select id="co-status"></select></div>
+      </div>
+      <div class="field"><label for="co-url">Odkaz na kurz</label><input id="co-url" type="url" maxlength="300" autocomplete="off" inputmode="url" placeholder="https://…"></div>
+      <div class="three">
+        <div class="field"><label for="co-price">Cena (Kč)</label><input id="co-price" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+        <div class="field"><label for="co-paid">Zaplaceno (Kč)</label><input id="co-paid" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+        <div class="field"><label for="co-saved">Našetřeno (Kč)</label><input id="co-saved" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+      </div>
+      <div class="two">
+        <div class="field"><label for="co-prep">Jak dlouho trvá příprava</label><input id="co-prep" type="text" inputmode="numeric" autocomplete="off" placeholder="např. 3"></div>
+        <div class="field"><label for="co-unit">Jednotka</label><select id="co-unit"></select></div>
+      </div>
+      <div class="field"><label for="co-next">Další krok</label><input id="co-next" type="text" maxlength="200" autocomplete="off" placeholder="např. Zjistit termíny zkoušky"></div>
+      <div class="field"><label for="co-note">Poznámka</label><textarea id="co-note" rows="3" maxlength="1000"></textarea></div>
+      <p id="co-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" id="co-delete" class="btn btn-danger" hidden>Smazat</button>
+        <span class="grow"></span>
+        <button type="button" class="btn" data-close>Zrušit</button>
+        <button type="submit" class="btn btn-primary">Uložit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="money-dialog" aria-labelledby="mo-title">
+    <form id="money-form" novalidate>
+      <p class="eyebrow">Přidat peníze</p>
+      <h2 id="mo-title"></h2>
+      <p id="mo-info" class="muted"></p>
+      <div class="field"><label for="mo-amount">Částka (Kč)</label><input id="mo-amount" type="text" inputmode="numeric" autocomplete="off" placeholder="např. 2 000"></div>
+      <fieldset class="field">
+        <legend>Co se stalo</legend>
+        <label class="opt"><input type="radio" name="mo-kind" id="mo-kind-save" checked> Odložila jsem si stranou</label>
+        <label class="opt"><input type="radio" name="mo-kind" id="mo-kind-pay"> Zaplatila jsem</label>
+      </fieldset>
+      <label id="mo-from-wrap" class="opt" hidden><input id="mo-from-saved" type="checkbox" checked> Zaplatila jsem z našetřených peněz</label>
+      <p id="mo-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <span class="grow"></span>
+        <button type="button" class="btn" data-close>Zrušit</button>
+        <button type="submit" class="btn btn-primary">Zapsat</button>
       </div>
     </form>
   </dialog>

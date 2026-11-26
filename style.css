@@ -1027,3 +1027,56 @@ dialog.start { width: min(460px, 92vw); }
 .seq-block:hover { transform: translateY(-1px); box-shadow: 0 16px 28px -16px var(--b), inset 0 1px 0 rgba(255, 255, 255, .4); }
 .seq-dot { transition: background .2s, border-color .2s; }
 .start-first { transition: border-color .2s; }
+
+/* ===== Kariéra ===== */
+.career-goal { display: grid; gap: 8px; margin-bottom: 16px; }
+.career-goal textarea {
+  width: 100%; resize: vertical; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, .05); color: var(--text); font: inherit; font-size: 17px; font-weight: 700;
+}
+.career-goal .fine { margin: 0; text-align: left; }
+.opt { display: flex; align-items: center; gap: 10px; min-height: 40px; font-weight: 700; cursor: pointer; }
+.opt input { width: 20px; height: 20px; accent-color: var(--teal); }
+.career-sum { display: grid; gap: 14px; margin-bottom: 16px; }
+.csum-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.csum { display: grid; gap: 2px; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); }
+.csum span { font-size: 13px; font-weight: 700; color: var(--muted); }
+.csum strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.csum-miss { background: rgba(255, 200, 97, .14); box-shadow: inset 0 0 0 1px rgba(255, 200, 97, .45); }
+.csum-note { margin: 0; font-size: 14px; }
+.cbar { display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, .1); }
+.cbar-paid { background: var(--teal); }
+.cbar-saved { background: repeating-linear-gradient(135deg, #a99bff 0 6px, #7c6cff 6px 12px); }
+.course { display: grid; gap: 10px; padding: 18px; border-radius: 18px; color: var(--fg);
+  background: linear-gradient(145deg, var(--a), var(--b)); box-shadow: 0 10px 30px -14px rgba(0, 0, 0, .6); }
+.course.is-done { opacity: .78; }
+.course h3 { margin: 6px 0 2px; font-size: 19px; line-height: 1.25; }
+.course .due-pill { display: inline-block; }
+.course .icon-btn { color: var(--fg); }
+.course .icon-btn:hover { background: var(--soft); }
+.course .routine-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.course .routine-meta .i { width: 16px; height: 16px; }
+.course-link { color: inherit; font-weight: 800; }
+.course-money { display: grid; gap: 6px; }
+.course-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 14px; font-weight: 700; color: var(--fg2); }
+.course-row strong { font-size: 20px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.course .cbar { background: var(--soft); }
+.course .cbar-paid { background: var(--fg); }
+.course .cbar-saved { background: repeating-linear-gradient(135deg, var(--fg) 0 4px, transparent 4px 9px); opacity: .7; }
+.course-legend { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--fg2); }
+.lg { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.lg-paid { background: var(--fg); }
+.lg-saved { background: repeating-linear-gradient(135deg, var(--fg) 0 3px, transparent 3px 6px); opacity: .7; }
+.lg-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; margin-right: 10px; }
+.course-next { padding: 10px 12px; border-radius: 12px; background: var(--soft); }
+.course-next-l { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
+.course-next p { margin: 2px 0 0; font-weight: 700; }
+.course-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.course .course-btn { flex: 1; min-height: 44px; background: var(--fg); color: var(--b); border: 0; font-weight: 800; white-space: nowrap; }
+#course-done .course-grid { margin-top: 14px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+#money-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+@media (max-width: 720px) {
+  .csum-grid { grid-template-columns: 1fr 1fr; }
+  .three { grid-template-columns: 1fr; }
+}
